@@ -100,6 +100,7 @@ document.addEventListener("DOMContentLoaded", function () {
             pauseDiv.style.display = 'none';
           };
         } catch (err) {
+          // Errors are now handled silently on the frontend
         }
       });
 
@@ -241,7 +242,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
   // ===================================================================
-  // Phone Call Trigger Logic with Rate Limiting
+  // NEW CODE: Phone Call Trigger Logic with Rate Limiting
   // ===================================================================
   const callTriggerForm = document.getElementById('wf-form-Home-Hero-Demo');
   const phoneInputField = document.getElementById('hero-form-field');
@@ -256,6 +257,7 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
 
+      // --- Rate Limiting Logic ---
       const now = Date.now();
       const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
       const MAX_CALLS = 10;
@@ -267,23 +269,29 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
       }
 
+      // Reset the counter if the 10-minute window has expired
       if (callData && (now - callData.timestamp > TEN_MINUTES_IN_MS)) {
         callData = null;
         localStorage.removeItem(rateLimitStorageKey);
       }
 
+      // Initialize if it's the first time or after a reset
       if (!callData) {
-        callData = { count: 0, timestamp: now };
+        // Initialize with a placeholder timestamp. It will be set on the first successful call.
+        callData = { count: 0, timestamp: 0 };
       }
 
+      // Check if the user has exceeded the call limit
       if (callData.count >= MAX_CALLS) {
         originalButtonTextContainer.textContent = "Limit Reached";
         callSubmitButton.disabled = true;
+        // Re-enable after a delay to allow another try later without a page refresh
         setTimeout(() => {
             callSubmitButton.disabled = false;
         }, TEN_MINUTES_IN_MS);
-        return;
+        return; // Stop execution
       }
+      // --- End of Rate Limiting Logic ---
 
       const originalButtonText = originalButtonTextContainer.textContent;
       const waitText = callSubmitButton.getAttribute('data-wait') || "Please wait...";
@@ -312,10 +320,12 @@ document.addEventListener("DOMContentLoaded", function () {
         const result = await response.json();
         originalButtonTextContainer.textContent = "Success!";
 
-        callData.count++;
-        if (callData.count === 1) {
+        // On success, update the counter and timestamp in localStorage
+        // If it's the first successful call, set the timestamp to start the 10-minute window
+        if (callData.count === 0) {
             callData.timestamp = Date.now();
         }
+        callData.count++; // Increment the counter
         localStorage.setItem(rateLimitStorageKey, JSON.stringify(callData));
 
       } catch (error) {
@@ -325,7 +335,7 @@ document.addEventListener("DOMContentLoaded", function () {
         setTimeout(() => {
             originalButtonTextContainer.textContent = originalButtonText;
             callSubmitButton.disabled = false;
-        }, 3000);
+        }, 3000); // Reset after 3 seconds
       }
     });
   }
