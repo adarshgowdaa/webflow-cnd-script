@@ -1,4 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
+  // ===================================================================
+  // Existing ASR (Speech-to-Text) and TTS (Text-to-Speech) Code
+  // ===================================================================
   const MAX_RECORDING_TIME = 30000; // 30 seconds
   let isRecording = false;
   let mediaRecorder = null;
@@ -19,25 +22,107 @@ document.addEventListener("DOMContentLoaded", function () {
   const playButton = document.getElementById("play-tts");
   const pauseButton = document.getElementById("pause-tts");
 
-  // Ensure all required elements are available
-  if (!startButton || !stopButton || !transcriptDisplay || !form || !textField || !field2 || !playDiv || !pauseDiv || !playButton || !pauseButton) {
-    console.error("Missing one or more required elements.");
-    return;
+  // Check for ASR/TTS elements before adding listeners
+  if (startButton && stopButton && transcriptDisplay) {
+    // Start Recording
+    startButton.addEventListener("click", function () {
+      if (!isRecording) {
+        startRecording();
+      }
+    });
+
+    // Stop Recording
+    stopButton.addEventListener("click", function () {
+      if (isRecording) {
+        stopRecording();
+      }
+    });
   }
 
-  // Start Recording
-  startButton.addEventListener("click", function () {
-    if (!isRecording) {
-      startRecording();
-    }
-  });
+  // Check for TTS form elements before adding listeners
+  if (form && textField && field2 && playDiv && pauseDiv && playButton && pauseButton) {
+      // TTS Form Submission
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
 
-  // Stop Recording
-  stopButton.addEventListener("click", function () {
-    if (isRecording) {
-      stopRecording();
-    }
-  });
+        const text = textField.value.trim();
+        if (!text) {
+          return;
+        }
+
+        field2.value = text;
+
+        try {
+          const payload = {
+            text: text,
+            model: "mix-IN",
+            audio_bytes: null,
+            sample_rate: 24000,
+            voice_name: "hi_female_1",
+            params: {
+              stream_chunk_size: 20,
+              speed: 1
+            }
+          };
+
+          const response = await fetch("https://ttsplayground-bk.gnani.site/api/v1/api/file/process", {
+            method: "POST",
+            headers: {
+              "Accept": "*/*",
+              "Content-Type": "application/json",
+              "Origin": "https://gnani-ai.webflow.io",
+              "Referer": "https://gnani-ai.webflow.io/",
+              "x-request-id": crypto.randomUUID()
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`TTS API request failed: ${response.statusText}. Details: ${errorText}`);
+          }
+
+          const responseText = await response.text();
+          const base64Data = responseText.replace(/^"|"$/g, "");
+          const binaryString = atob(base64Data);
+          const pcmBytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            pcmBytes[i] = binaryString.charCodeAt(i);
+          }
+
+          const wavBlob = createWavBlob(pcmBytes, 24000, 1, 16);
+          const audioUrl = URL.createObjectURL(wavBlob);
+
+          audio = new Audio(audioUrl);
+
+          audio.onended = function () {
+            playDiv.style.display = 'block';
+            pauseDiv.style.display = 'none';
+          };
+        } catch (err) {
+        }
+      });
+
+      // Play and Pause Controls for TTS
+      playButton.addEventListener("click", function () {
+        if (audio) {
+          audio.play().catch(err => {
+            // Errors are now handled silently on the frontend
+          });
+          playDiv.style.display = 'none';
+          pauseDiv.style.display = 'block';
+        }
+      });
+
+      pauseButton.addEventListener("click", function () {
+        if (audio && !audio.paused) {
+          audio.pause();
+          playDiv.style.display = 'block';
+          pauseDiv.style.display = 'none';
+        }
+      });
+  }
+
 
   async function startRecording() {
     try {
@@ -55,10 +140,9 @@ document.addEventListener("DOMContentLoaded", function () {
       isRecording = true;
       transcriptDisplay.textContent = "Recording...";
 
-      // Automatically stop after MAX_RECORDING_TIME
       setTimeout(stopRecording, MAX_RECORDING_TIME);
     } catch (error) {
-      console.error('Error accessing microphone:', error);
+      // Errors are now handled silently on the frontend
     }
   }
 
@@ -93,7 +177,6 @@ document.addEventListener("DOMContentLoaded", function () {
       });
 
       if (!response.ok) {
-        console.error("API request failed:", response.status, response.statusText);
         transcriptDisplay.textContent = "Error during transcription.";
         return;
       }
@@ -106,7 +189,6 @@ document.addEventListener("DOMContentLoaded", function () {
         transcriptDisplay.textContent = 'Transcription failed';
       }
     } catch (error) {
-      console.error('Error processing audio:', error);
       transcriptDisplay.textContent = 'Error processing audio. Please try again.';
     }
   }
@@ -123,96 +205,6 @@ document.addEventListener("DOMContentLoaded", function () {
     return pcmData;
   }
 
-  // TTS Form Submission
-  form.addEventListener("submit", async function (e) {
-    e.preventDefault();
-
-    const text = textField.value.trim();
-    if (!text) {
-      alert("Please enter some text!");
-      return;
-    }
-
-    field2.value = text;
-
-    try {
-      const payload = {
-        text: text,
-        model: "mix-IN",
-        audio_bytes: null,
-        sample_rate: 24000,
-        voice_name: "hi_female_1",
-        params: {
-          stream_chunk_size: 20,
-          speed: 1
-        }
-      };
-
-      const response = await fetch("https://ttsplayground-bk.gnani.site/api/v1/api/file/process", {
-        method: "POST",
-        headers: {
-          "Accept": "*/*",
-          "Content-Type": "application/json",
-          "Origin": "https://gnani-ai.webflow.io",
-          "Referer": "https://gnani-ai.webflow.io/",
-          "x-request-id": crypto.randomUUID()
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("API error response:", errorText);
-        throw new Error(`TTS API request failed: ${response.statusText}. Details: ${errorText}`);
-      }
-
-      const responseText = await response.text();
-      const base64Data = responseText.replace(/^"|"$/g, "");
-      const binaryString = atob(base64Data);
-      const pcmBytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        pcmBytes[i] = binaryString.charCodeAt(i);
-      }
-
-      const wavBlob = createWavBlob(pcmBytes, 24000, 1, 16);
-      const audioUrl = URL.createObjectURL(wavBlob);
-
-      audio = new Audio(audioUrl);
-
-      audio.onended = function () {
-        playDiv.style.display = 'block';
-        pauseDiv.style.display = 'none';
-      };
-    } catch (err) {
-      console.error("Error occurred during TTS processing:", err);
-      alert("Failed to generate audio.");
-    }
-  });
-
-  // Play and Pause Controls
-  playButton.addEventListener("click", function () {
-    if (audio) {
-      audio.play().catch(err => {
-        console.error("Playback error:", err);
-        alert("Audio playback failed.");
-      });
-      playDiv.style.display = 'none';
-      pauseDiv.style.display = 'block';
-    } else {
-      console.error("No audio available to play");
-    }
-  });
-
-  pauseButton.addEventListener("click", function () {
-    if (audio && !audio.paused) {
-      audio.pause();
-      playDiv.style.display = 'block';
-      pauseDiv.style.display = 'none';
-    } else {
-      console.error("No audio is currently playing");
-    }
-  });
-
   function createWavBlob(pcmBytes, sampleRate = 24000, numChannels = 1, bitsPerSample = 16) {
     const blockAlign = numChannels * bitsPerSample / 8;
     const byteRate = sampleRate * blockAlign;
@@ -220,6 +212,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const buffer = new ArrayBuffer(44 + dataLength);
     const view = new DataView(buffer);
     let offset = 0;
+
     function writeString(str) {
       for (let i = 0; i < str.length; i++) {
         view.setUint8(offset++, str.charCodeAt(i));
@@ -229,7 +222,6 @@ document.addEventListener("DOMContentLoaded", function () {
     writeString("RIFF");
     view.setUint32(offset, 36 + dataLength, true); offset += 4;
     writeString("WAVE");
-
     writeString("fmt ");
     view.setUint32(offset, 16, true); offset += 4;
     view.setUint16(offset, 1, true); offset += 2;
@@ -238,7 +230,6 @@ document.addEventListener("DOMContentLoaded", function () {
     view.setUint32(offset, byteRate, true); offset += 4;
     view.setUint16(offset, blockAlign, true); offset += 2;
     view.setUint16(offset, bitsPerSample, true); offset += 2;
-
     writeString("data");
     view.setUint32(offset, dataLength, true); offset += 4;
 
@@ -246,5 +237,96 @@ document.addEventListener("DOMContentLoaded", function () {
     wavBytes.set(pcmBytes, 44);
 
     return new Blob([wavBytes], { type: "audio/wav" });
+  }
+
+
+  // ===================================================================
+  // Phone Call Trigger Logic with Rate Limiting
+  // ===================================================================
+  const callTriggerForm = document.getElementById('wf-form-Home-Hero-Demo');
+  const phoneInputField = document.getElementById('hero-form-field');
+  const callSubmitButton = document.getElementById('hero-form-button');
+
+  if (callTriggerForm && phoneInputField && callSubmitButton) {
+    callTriggerForm.addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const phoneNumber = phoneInputField.value.trim();
+      if (!/^\d{10}$/.test(phoneNumber)) {
+        return;
+      }
+
+      const now = Date.now();
+      const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+      const MAX_CALLS = 10;
+      const rateLimitStorageKey = 'apiCallRateLimit';
+      let callData = JSON.parse(localStorage.getItem(rateLimitStorageKey));
+      
+      const originalButtonTextContainer = callSubmitButton.querySelector('.hover-text:not(.cloned-text)');
+      if (!originalButtonTextContainer) {
+          return;
+      }
+
+      if (callData && (now - callData.timestamp > TEN_MINUTES_IN_MS)) {
+        callData = null;
+        localStorage.removeItem(rateLimitStorageKey);
+      }
+
+      if (!callData) {
+        callData = { count: 0, timestamp: now };
+      }
+
+      if (callData.count >= MAX_CALLS) {
+        originalButtonTextContainer.textContent = "Limit Reached";
+        callSubmitButton.disabled = true;
+        setTimeout(() => {
+            callSubmitButton.disabled = false;
+        }, TEN_MINUTES_IN_MS);
+        return;
+      }
+
+      const originalButtonText = originalButtonTextContainer.textContent;
+      const waitText = callSubmitButton.getAttribute('data-wait') || "Please wait...";
+      originalButtonTextContainer.textContent = waitText;
+      callSubmitButton.disabled = true;
+
+      try {
+        const response = await fetch('https://api.inya.ai/genbots/website_trigger_call/11b6b4f44d0b4f12ad51dccb500f8aed', {
+          method: 'POST',
+          headers: {
+            'accept': 'application/json',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            phone: phoneNumber,
+            name: "",
+            countryCode: "+91"
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API request failed: ${response.status} ${response.statusText}. Details: ${errorText}`);
+        }
+
+        const result = await response.json();
+        originalButtonTextContainer.textContent = "Success!";
+
+        callData.count++;
+        if (callData.count === 1) {
+            callData.timestamp = Date.now();
+        }
+        localStorage.setItem(rateLimitStorageKey, JSON.stringify(callData));
+
+      } catch (error) {
+        originalButtonTextContainer.textContent = "Failed!";
+
+      } finally {
+        setTimeout(() => {
+            originalButtonTextContainer.textContent = originalButtonText;
+            callSubmitButton.disabled = false;
+        }, 3000);
+      }
+    });
   }
 });
