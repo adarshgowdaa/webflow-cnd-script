@@ -302,7 +302,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const formData = new FormData();
       formData.append('audio_file', wavBlob, 'audio.wav');
       formData.append('sampling_rate', '16000');
-      formData.append('language_code', 'as-IN, bn-BD, bn-IN, en-IN, gu-IN, hi-IN, kn-IN, ml-IN, mr-IN, ne-IN, or-IN, pa-IN, ta-IN, te-IN');
+      formData.append('language_code', 'bn-IN, en-IN, gu-IN, hi-IN, kn-IN, ml-IN, mr-IN, or-IN, pa-IN, ta-IN, te-IN');
       formData.append('sender_id', crypto.randomUUID());
 
       const response = await fetch('https://api.vachana.ai/stt/v3', {
