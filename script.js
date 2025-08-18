@@ -1,17 +1,21 @@
 document.addEventListener("DOMContentLoaded", function () {
-  // ===================================================================
-  // Existing ASR (Speech-to-Text) and TTS (Text-to-Speech) Code
-  // ===================================================================
-  const MAX_RECORDING_TIME = 30000; // 30 seconds
+  const MAX_RECORDING_TIME = 30000;
   let isRecording = false;
   let mediaRecorder = null;
   let audioChunks = [];
   let audio = null;
+  let recordingTimerInterval = null;
 
   // DOM elements for ASR
+  const startAsrBlock = document.getElementById('tsr-screen-1');
+  const pauseAsrBlock = document.getElementById('pause-asr-block');
+  const asrLoaderBlock = document.getElementById('asr-loader');
+  const asrResultBlock = document.querySelector('.technology_tsr-result');
   const startButton = document.getElementById('start-asr');
   const stopButton = document.getElementById('stop-asr');
-  const transcriptDisplay = document.getElementById('live-transcription');
+  const transcriptDisplay = document.getElementById('asr-live-transcription');
+  const languageDisplay = document.getElementById('asr-language-detected');
+  const asrTimerDisplay = document.getElementById('asr-timer');
 
   // DOM elements for TTS
   const form = document.getElementById("email-form");
@@ -22,16 +26,46 @@ document.addEventListener("DOMContentLoaded", function () {
   const playButton = document.getElementById("play-tts");
   const pauseButton = document.getElementById("pause-tts");
 
-  // Check for ASR/TTS elements before adding listeners
+  // UI state management functions
+  function showInitialState() {
+    if (startAsrBlock) startAsrBlock.style.display = 'block';
+    if (asrLoaderBlock) asrLoaderBlock.style.display = 'none';
+    if (pauseAsrBlock) pauseAsrBlock.style.display = 'none';
+    if (asrResultBlock) asrResultBlock.style.display = 'none';
+  }
+  
+  function showRecordingState() {
+    if (startAsrBlock) startAsrBlock.style.display = 'none';
+    if (asrLoaderBlock) asrLoaderBlock.style.display = 'none';
+    if (pauseAsrBlock) pauseAsrBlock.style.display = 'flex';
+    if (asrResultBlock) asrResultBlock.style.display = 'none';
+  }
+
+  function showProcessingState() {
+    if (startAsrBlock) startAsrBlock.style.display = 'none';
+    if (asrLoaderBlock) asrLoaderBlock.style.display = 'flex';
+    if (pauseAsrBlock) pauseAsrBlock.style.display = 'none';
+    if (asrResultBlock) asrResultBlock.style.display = 'none';
+  }
+  
+  function showResultState(transcript, language) {
+    if (startAsrBlock) startAsrBlock.style.display = 'none';
+    if (asrLoaderBlock) asrLoaderBlock.style.display = 'none';
+    if (pauseAsrBlock) pauseAsrBlock.style.display = 'none';
+    if (asrResultBlock) asrResultBlock.style.display = 'flex';
+    if (transcriptDisplay) transcriptDisplay.textContent = transcript;
+    if (languageDisplay) languageDisplay.textContent = language;
+  }
+  
+  showInitialState();
+
   if (startButton && stopButton && transcriptDisplay) {
-    // Start Recording
     startButton.addEventListener("click", function () {
       if (!isRecording) {
         startRecording();
       }
     });
 
-    // Stop Recording
     stopButton.addEventListener("click", function () {
       if (isRecording) {
         stopRecording();
@@ -39,7 +73,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Check for TTS form elements before adding listeners
   if (form && textField && field2 && playDiv && pauseDiv && playButton && pauseButton) {
       // TTS Form Submission
       form.addEventListener("submit", async function (e) {
@@ -100,7 +133,6 @@ document.addEventListener("DOMContentLoaded", function () {
             pauseDiv.style.display = 'none';
           };
         } catch (err) {
-          // Errors are now handled silently on the frontend
         }
       });
 
@@ -108,7 +140,6 @@ document.addEventListener("DOMContentLoaded", function () {
       playButton.addEventListener("click", function () {
         if (audio) {
           audio.play().catch(err => {
-            // Errors are now handled silently on the frontend
           });
           playDiv.style.display = 'none';
           pauseDiv.style.display = 'block';
@@ -139,58 +170,86 @@ document.addEventListener("DOMContentLoaded", function () {
 
       mediaRecorder.start();
       isRecording = true;
-      transcriptDisplay.textContent = "Recording...";
+      showRecordingState();
+      
+      let timeLeft = MAX_RECORDING_TIME / 1000;
+      if (asrTimerDisplay) asrTimerDisplay.textContent = `00:${String(timeLeft).padStart(2, '0')}`;
+      recordingTimerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft >= 0) {
+          if (asrTimerDisplay) asrTimerDisplay.textContent = `00:${String(timeLeft).padStart(2, '0')}`;
+        }
+      }, 1000);
 
       setTimeout(stopRecording, MAX_RECORDING_TIME);
     } catch (error) {
-      // Errors are now handled silently on the frontend
+      console.error("Error starting recording:", error);
+      if (transcriptDisplay) transcriptDisplay.textContent = "Error: Could not access microphone.";
+      showInitialState();
     }
   }
 
   function stopRecording() {
     if (mediaRecorder && isRecording) {
+      const stream = mediaRecorder.stream;
+      
       mediaRecorder.stop();
       isRecording = false;
-
+      clearInterval(recordingTimerInterval);
+  
+      showProcessingState();
+  
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-        await processAudio(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+  
+        const recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        await processAudio(recordedBlob);
       };
     }
   }
 
-  async function processAudio(audioBlob) {
+  async function processAudio(recordedBlob) {
     try {
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const audioContext = new AudioContext();
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const arrayBuffer = await recordedBlob.arrayBuffer();
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      const pcmData = convertToPCM16(audioBuffer);
 
-      const response = await fetch('https://vachana.gnani.site/stt/v2', {
+      const resampledAudioBuffer = await resampleAudio(audioBuffer, 16000);
+      
+      const pcm16Data = convertToPCM16(resampledAudioBuffer);
+      
+      const wavBlob = createWavBlob(pcm16Data, 16000, 1, 16);
+
+      const formData = new FormData();
+      formData.append('audio_file', wavBlob, 'audio.wav');
+      formData.append('sampling_rate', '16000');
+      formData.append('language_code', 'as-IN, bn-BD, bn-IN, en-IN, gu-IN, hi-IN, kn-IN, ml-IN, mr-IN, ne-IN, or-IN, pa-IN, ta-IN, te-IN');
+      formData.append('sender_id', crypto.randomUUID());
+
+
+      const response = await fetch('https://api.vachana.ai/stt/v3', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'sampling-rate': '48000',
-          'lang': 'en-IN',
-          'model': 'ML'
-        },
-        body: pcmData,
+        body: formData,
       });
 
       if (!response.ok) {
-        transcriptDisplay.textContent = "Error during transcription.";
+        const errorText = await response.text();
+        console.error('API Error:', response.status, response.statusText, errorText);
+        showResultState(`Error during transcription: ${response.statusText}. Details: ${errorText}`, "N/A");
         return;
       }
 
       const result = await response.json();
       if (result.success) {
         const cleanTranscript = result.transcript.replace(/<[^>]+>/g, '').trim();
-        transcriptDisplay.textContent = cleanTranscript || 'No transcription available';
+        const detectedLanguage = result.language_detected || 'Unknown';
+        showResultState(cleanTranscript || 'No transcription available', detectedLanguage);
       } else {
-        transcriptDisplay.textContent = 'Transcription failed';
+        showResultState('Transcription failed', 'N/A');
       }
     } catch (error) {
-      transcriptDisplay.textContent = 'Error processing audio. Please try again.';
+      console.error('Error processing audio:', error);
+      showResultState('Error processing audio. Please try again.', 'N/A');
     }
   }
 
@@ -205,11 +264,26 @@ document.addEventListener("DOMContentLoaded", function () {
 
     return pcmData;
   }
+  
+  function resampleAudio(audioBuffer, targetSampleRate) {
+    const numberOfChannels = audioBuffer.numberOfChannels;
+    const oldSampleRate = audioBuffer.sampleRate;
+    const newLength = Math.round(audioBuffer.length * targetSampleRate / oldSampleRate);
+    
+    const offlineContext = new OfflineAudioContext(numberOfChannels, newLength, targetSampleRate);
+    const bufferSource = offlineContext.createBufferSource();
+    bufferSource.buffer = audioBuffer;
+    bufferSource.connect(offlineContext.destination);
+    bufferSource.start();
+    
+    return offlineContext.startRendering();
+  }
 
-  function createWavBlob(pcmBytes, sampleRate = 24000, numChannels = 1, bitsPerSample = 16) {
+
+  function createWavBlob(pcmBytes, sampleRate = 16000, numChannels = 1, bitsPerSample = 16) {
     const blockAlign = numChannels * bitsPerSample / 8;
     const byteRate = sampleRate * blockAlign;
-    const dataLength = pcmBytes.length;
+    const dataLength = pcmBytes.length * 2; // 16-bit PCM is 2 bytes per sample
     const buffer = new ArrayBuffer(44 + dataLength);
     const view = new DataView(buffer);
     let offset = 0;
@@ -235,14 +309,15 @@ document.addEventListener("DOMContentLoaded", function () {
     view.setUint32(offset, dataLength, true); offset += 4;
 
     const wavBytes = new Uint8Array(buffer);
-    wavBytes.set(pcmBytes, 44);
+    const pcmUint8View = new Uint8Array(pcmBytes.buffer);
+    wavBytes.set(pcmUint8View, 44);
 
     return new Blob([wavBytes], { type: "audio/wav" });
   }
 
 
   // ===================================================================
-  // NEW CODE: Phone Call Trigger Logic with Rate Limiting
+  // Phone Call Trigger Logic with Rate Limiting
   // ===================================================================
   const callTriggerForm = document.getElementById('wf-form-Home-Hero-Demo');
   const phoneInputField = document.getElementById('hero-form-field');
@@ -257,7 +332,6 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
 
-      // --- Rate Limiting Logic ---
       const now = Date.now();
       const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
       const MAX_CALLS = 10;
@@ -269,29 +343,23 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
       }
 
-      // Reset the counter if the 10-minute window has expired
       if (callData && (now - callData.timestamp > TEN_MINUTES_IN_MS)) {
         callData = null;
         localStorage.removeItem(rateLimitStorageKey);
       }
 
-      // Initialize if it's the first time or after a reset
       if (!callData) {
-        // Initialize with a placeholder timestamp. It will be set on the first successful call.
         callData = { count: 0, timestamp: 0 };
       }
 
-      // Check if the user has exceeded the call limit
       if (callData.count >= MAX_CALLS) {
         originalButtonTextContainer.textContent = "Limit Reached";
         callSubmitButton.disabled = true;
-        // Re-enable after a delay to allow another try later without a page refresh
         setTimeout(() => {
             callSubmitButton.disabled = false;
         }, TEN_MINUTES_IN_MS);
-        return; // Stop execution
+        return;
       }
-      // --- End of Rate Limiting Logic ---
 
       const originalButtonText = originalButtonTextContainer.textContent;
       const waitText = callSubmitButton.getAttribute('data-wait') || "Please wait...";
@@ -320,12 +388,10 @@ document.addEventListener("DOMContentLoaded", function () {
         const result = await response.json();
         originalButtonTextContainer.textContent = "Success!";
 
-        // On success, update the counter and timestamp in localStorage
-        // If it's the first successful call, set the timestamp to start the 10-minute window
         if (callData.count === 0) {
             callData.timestamp = Date.now();
         }
-        callData.count++; // Increment the counter
+        callData.count++;
         localStorage.setItem(rateLimitStorageKey, JSON.stringify(callData));
 
       } catch (error) {
@@ -335,7 +401,7 @@ document.addEventListener("DOMContentLoaded", function () {
         setTimeout(() => {
             originalButtonTextContainer.textContent = originalButtonText;
             callSubmitButton.disabled = false;
-        }, 3000); // Reset after 3 seconds
+        }, 3000);
       }
     });
   }
