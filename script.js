@@ -18,15 +18,22 @@ document.addEventListener("DOMContentLoaded", function () {
   const asrTimerDisplay = document.getElementById('asr-timer');
 
   // DOM elements for TTS
-  const form = document.getElementById("email-form");
-  const textField = document.getElementById("tts-input");
-  const field2 = document.getElementById("field-2");
-  const playDiv = document.getElementById("integ2-state2");
-  const pauseDiv = document.getElementById("integ2-state3");
+  const ttsInputButton = document.getElementById("tts-input-button");
+  const ttsInputScreen = document.getElementById("tts-screen-1");
+  const ttsResultScreen = document.getElementById("integ2-screen2");
+  const ttsLoaderBlock = document.getElementById("tts-loader");
+  const ttsResultPlayBlock = document.getElementById("tts-result-play");
+  const ttsResultPauseBlock = document.getElementById("tts-result-pause");
+  const ttsTextField = document.getElementById("tts-input");
+  const ttsResultType = document.getElementById("tts-result-type");
+  const ttsResultPerson = document.getElementById("tts-result-preson");
+  const ttsResultLang = document.getElementById("tts-result-lang");
   const playButton = document.getElementById("play-tts");
   const pauseButton = document.getElementById("pause-tts");
+  const ttsLanguageRadios = document.querySelectorAll('input[name="TTS-Language"]');
 
-  // UI state management functions
+
+  // ASR UI state management functions
   function showInitialState() {
     if (startAsrBlock) startAsrBlock.style.display = 'block';
     if (asrLoaderBlock) asrLoaderBlock.style.display = 'none';
@@ -73,30 +80,92 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  if (form && textField && field2 && playDiv && pauseDiv && playButton && pauseButton) {
-      // TTS Form Submission
-      form.addEventListener("submit", async function (e) {
-        e.preventDefault();
+  // TTS Voice and Language Mapping
+  const voiceMapping = {
+    "Divya": { voice_name: "hi_female_1", language: "Hindi", model: "mix-IN" },
+    "Anu": { voice_name: "hi_female_2", language: "Hindi", model: "mix-IN" },
+    "Disha": { voice_name: "hi_female_3", language: "Hindi", model: "mix-IN" },
+    "Arjun": { voice_name: "ravan", language: "Hindi", model: "mix-IN" },
+    "Claire": { voice_name: "en_female_1", language: "English", model: "mix-IN" },
+    "Mark": { voice_name: "en_male_2", language: "English", model: "mix-IN" },
+  };
 
-        const text = textField.value.trim();
+  const languageModels = {
+      "Hindi": "mix-IN",
+      "English": "mix-IN",
+      "Bengali": "mix-IN",
+      "Marathi": "mix-IN",
+      "Kannada": "mix-IN",
+      "Tamil": "mix-IN",
+  };
+
+  // TTS UI state management functions
+  function showTtsInputScreen() {
+    if (ttsInputScreen) ttsInputScreen.style.display = 'block';
+    if (ttsResultScreen) ttsResultScreen.style.display = 'none';
+  }
+
+  function showTtsProcessingState() {
+    if (ttsInputScreen) ttsInputScreen.style.display = 'none';
+    if (ttsResultScreen) ttsResultScreen.style.display = 'grid';
+    if (ttsLoaderBlock) ttsLoaderBlock.style.display = 'block';
+    if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'none';
+    if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
+  }
+
+  function showTtsResultState(text, person, language) {
+    if (ttsInputScreen) ttsInputScreen.style.display = 'none';
+    if (ttsResultScreen) ttsResultScreen.style.display = 'grid';
+    if (ttsLoaderBlock) ttsLoaderBlock.style.display = 'none';
+    if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
+    if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
+    if (ttsResultType) ttsResultType.textContent = text;
+    if (ttsResultPerson) ttsResultPerson.textContent = person;
+    if (ttsResultLang) ttsResultLang.textContent = language;
+  }
+
+  // ===================================================================
+  // TTS Logic
+  // ===================================================================
+  if (ttsInputButton && ttsTextField) {
+      ttsInputButton.addEventListener("click", async function (e) {
+        e.preventDefault();
+        console.log("Button clicked!");
+
+        const text = ttsTextField.value.trim();
         if (!text) {
+          console.log("Text field is empty, returning.");
           return;
         }
 
-        field2.value = text;
+        const selectedVoiceElement = document.querySelector('input[name="TTS-Voice"]:checked');
+        const selectedLanguageElement = document.querySelector('input[name="TTS-Language"]:checked');
+        
+        const selectedVoiceName = selectedVoiceElement ? selectedVoiceElement.id : 'Divya';
+        const selectedLanguageName = selectedLanguageElement ? selectedLanguageElement.id : 'English';
+
+        const voiceInfo = voiceMapping[selectedVoiceName];
+        const apiVoiceName = voiceInfo ? voiceInfo.voice_name : 'hi_female_1';
+        const language = voiceInfo ? voiceInfo.language : 'Hindi';
+
+        console.log(`Selected Voice Name: ${selectedVoiceName}`);
+        console.log(`API Voice Name: ${apiVoiceName}`);
+        
+        showTtsProcessingState();
 
         try {
           const payload = {
             text: text,
-            model: "mix-IN",
+            model: languageModels[selectedLanguageName],
             audio_bytes: null,
-            sample_rate: 24000,
-            voice_name: "hi_female_1",
+            sample_rate: 22050, 
+            voice_name: apiVoiceName,
             params: {
-              stream_chunk_size: 20,
+              stream_chunk_size: 120,
               speed: 1
             }
           };
+          console.log("Making API call with payload:", payload);
 
           const response = await fetch("https://ttsplayground-bk.gnani.site/api/v1/api/file/process", {
             method: "POST",
@@ -114,45 +183,55 @@ document.addEventListener("DOMContentLoaded", function () {
             const errorText = await response.text();
             throw new Error(`TTS API request failed: ${response.statusText}. Details: ${errorText}`);
           }
+          console.log("TTS API Success!");
 
           const responseText = await response.text();
           const base64Data = responseText.replace(/^"|"$/g, "");
           const binaryString = atob(base64Data);
-          const pcmBytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            pcmBytes[i] = binaryString.charCodeAt(i);
+          const pcmBytes = new Int16Array(binaryString.length / 2);
+          for (let i = 0; i < binaryString.length / 2; i++) {
+            pcmBytes[i] = (binaryString.charCodeAt(i * 2 + 1) << 8) | binaryString.charCodeAt(i * 2);
           }
 
-          const wavBlob = createWavBlob(pcmBytes, 24000, 1, 16);
+          const wavBlob = createWavBlob(pcmBytes, 22050, 1, 16);
           const audioUrl = URL.createObjectURL(wavBlob);
 
           audio = new Audio(audioUrl);
 
           audio.onended = function () {
-            playDiv.style.display = 'block';
-            pauseDiv.style.display = 'none';
+            if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
+            if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
           };
+          
+          showTtsResultState(text, selectedVoiceName, language);
         } catch (err) {
+          console.error("TTS Error:", err);
+          showTtsInputScreen();
+          alert("Error generating audio. Please try again.");
         }
       });
 
-      // Play and Pause Controls for TTS
-      playButton.addEventListener("click", function () {
-        if (audio) {
-          audio.play().catch(err => {
-          });
-          playDiv.style.display = 'none';
-          pauseDiv.style.display = 'block';
-        }
-      });
+      if (playButton) {
+        playButton.addEventListener("click", function () {
+          if (audio) {
+            audio.play().catch(err => {
+              console.error("Audio playback error:", err);
+            });
+            if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'none';
+            if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'grid';
+          }
+        });
+      }
 
-      pauseButton.addEventListener("click", function () {
-        if (audio && !audio.paused) {
-          audio.pause();
-          playDiv.style.display = 'block';
-          pauseDiv.style.display = 'none';
-        }
-      });
+      if (pauseButton) {
+        pauseButton.addEventListener("click", function () {
+          if (audio && !audio.paused) {
+            audio.pause();
+            if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
+            if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
+          }
+        });
+      }
   }
 
 
@@ -226,7 +305,6 @@ document.addEventListener("DOMContentLoaded", function () {
       formData.append('language_code', 'as-IN, bn-BD, bn-IN, en-IN, gu-IN, hi-IN, kn-IN, ml-IN, mr-IN, ne-IN, or-IN, pa-IN, ta-IN, te-IN');
       formData.append('sender_id', crypto.randomUUID());
 
-
       const response = await fetch('https://api.vachana.ai/stt/v3', {
         method: 'POST',
         body: formData,
@@ -280,11 +358,11 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
 
-  function createWavBlob(pcmBytes, sampleRate = 16000, numChannels = 1, bitsPerSample = 16) {
+  function createWavBlob(pcmBytes, sampleRate = 8000, numChannels = 1, bitsPerSample = 16) {
     const blockAlign = numChannels * bitsPerSample / 8;
     const byteRate = sampleRate * blockAlign;
-    const dataLength = pcmBytes.length * 2; // 16-bit PCM is 2 bytes per sample
-    const buffer = new ArrayBuffer(44 + dataLength);
+    const dataLength = pcmBytes.length;
+    const buffer = new ArrayBuffer(44 + dataLength * 2);
     const view = new DataView(buffer);
     let offset = 0;
 
@@ -295,7 +373,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     writeString("RIFF");
-    view.setUint32(offset, 36 + dataLength, true); offset += 4;
+    view.setUint32(offset, 36 + dataLength * 2, true); offset += 4;
     writeString("WAVE");
     writeString("fmt ");
     view.setUint32(offset, 16, true); offset += 4;
@@ -305,12 +383,13 @@ document.addEventListener("DOMContentLoaded", function () {
     view.setUint32(offset, byteRate, true); offset += 4;
     view.setUint16(offset, blockAlign, true); offset += 2;
     view.setUint16(offset, bitsPerSample, true); offset += 2;
-    writeString("data");
-    view.setUint32(offset, dataLength, true); offset += 4;
 
+    writeString("data");
+    view.setUint32(offset, dataLength * 2, true); offset += 4;
+
+    const tempPcmUint8View = new Uint8Array(pcmBytes.buffer);
     const wavBytes = new Uint8Array(buffer);
-    const pcmUint8View = new Uint8Array(pcmBytes.buffer);
-    wavBytes.set(pcmUint8View, 44);
+    wavBytes.set(tempPcmUint8View, 44);
 
     return new Blob([wavBytes], { type: "audio/wav" });
   }
