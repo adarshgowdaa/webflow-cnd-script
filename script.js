@@ -398,32 +398,58 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 // ==============================
-// STS Demo Audio with Seamless Switching
+// STS Demo Audio with Seamless Switching (multi-speaker, robust)
 // ==============================
 
-// Commit-pinned base to your repo
-const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/webflow-cnd-script@c1a92ba7a7133684d661c0a9351e2fc89bc989f8/';
+const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/webflow-cnd-script@3790c61bb841914a1ff291627ca71d64a45d3ec3/';
 
-// Map language (by radio id/value) to file name
-const stsLanguageToFile = {
-  English: 'English_Blondie.mp3',
-  German: 'German_Blondie.mp3',
-  Spanish: 'Spanish_Blondie.mp3',
+// Speakers and routing by selected target language
+function speakerForLanguage(lang) {
+  const L = (lang || '').trim();
+  if (['German', 'Spanish'].includes(L)) return 'Blondie';
+  if (L === 'French') return 'Matt';
+  if (['Kannada', 'Malayalam', 'Marathi'].includes(L)) return 'Raju';
+  if (['Hindi', 'Bengali', 'Tamil'].includes(L)) return 'Shakuntala';
+  return 'Blondie'; // default
+}
+
+// Per-speaker files (add only those you have; fallback covers the rest)
+const stsFilesBySpeaker = {
+  Blondie: {
+    English: 'English_Blondie.mp3',
+    German: 'German_Blondie.mp3',
+    Spanish: 'Spanish_Blondie.mp3',
+  },
+  Matt: {
+    English: 'English_Matt.mp3',
+    French: 'French_Matt.mp3',
+  },
+  Raju: {
+    English: 'English_Raju.mp3',
+    Kannada: 'Kannada_Raju.mp3',
+    Malayalam: 'Malayalam_Raju.mp3',
+    Marathi: 'Marathi_Raju.mp3',
+  },
+  Shakuntala: {
+    English: 'English_Shakuntala.mp3',
+    Hindi: 'Hindi_Shakuntala.mp3',
+    Bengali: 'Bengali_Shakuntala.mp3',
+    Tamil: 'Tamil_Shakuntala.mp3',
+  },
 };
 
-// Elements for STS player
+// Elements
 const stsLanguageRadios = document.querySelectorAll('input[name="STS-Language"]');
-const stsToggle = document.getElementById('sts-check'); // checkbox: Without (off) / With (on)
+const stsToggle = document.getElementById('sts-check');
 const stsPlayPauseBtn = document.getElementById('sts-play-pause');
 const stsPlayIcon = document.getElementById('sts-play-icon');
 const stsPauseIcon = document.getElementById('sts-pause-icon');
 
-// Single shared audio element
+// Single audio element
 let stsAudioEl = new Audio();
-// Hint the browser to prefetch
 stsAudioEl.preload = 'auto';
 
-let isSwitching = false; // debounce switching to avoid flapping
+let isSwitching = false;
 
 function updateStsIcons(isPlaying) {
   if (stsPlayIcon) stsPlayIcon.style.display = isPlaying ? 'none' : 'block';
@@ -431,24 +457,39 @@ function updateStsIcons(isPlaying) {
 }
 
 function getSelectedStsLanguage() {
+  // Prefer a checked radio
   const checked = Array.from(stsLanguageRadios).find(r => r.checked);
-  if (checked) return checked.id || checked.value || 'English';
+  if (checked) return (checked.id || checked.value || '').trim();
+  // Fallback to title text
   const title = document.getElementById('sts-language-title');
-  return (title && title.textContent.trim()) || 'English';
+  if (title && title.textContent.trim()) return title.textContent.trim();
+  return 'English';
 }
 
 function resolveStsAudioUrl() {
-  // If toggle is OFF (Without Gnani), always English
-  if (!stsToggle || !stsToggle.checked) {
-    return AUDIO_CDN_BASE + stsLanguageToFile.English;
-  }
-  // If toggle is ON (With Gnani), use selected language; default to English
   const lang = getSelectedStsLanguage();
-  const filename = stsLanguageToFile[lang] || stsLanguageToFile.English;
-  return AUDIO_CDN_BASE + filename;
+  const speaker = speakerForLanguage(lang);
+  const files = stsFilesBySpeaker[speaker] || {};
+
+  // Toggle OFF: initial audio should be English_<Speaker>.mp3 (your requirement)
+  const isWithGnani = !!(stsToggle && stsToggle.checked);
+  if (!isWithGnani) {
+    const engFile = files.English
+      || (stsFilesBySpeaker[speaker] && stsFilesBySpeaker[speaker].English)
+      || 'English_Blondie.mp3';
+    return AUDIO_CDN_BASE + engFile;
+  }
+
+  // Toggle ON: try target language file first, else fallback to English_<Speaker>.mp3
+  const targetFile = files[lang];
+  if (targetFile) return AUDIO_CDN_BASE + targetFile;
+
+  const engFallback = files.English
+    || (stsFilesBySpeaker[speaker] && stsFilesBySpeaker[speaker].English)
+    || 'English_Blondie.mp3';
+  return AUDIO_CDN_BASE + engFallback;
 }
 
-// Load URL preserving time and play/pause state
 async function switchStsSourcePreservePosition(newUrl) {
   if (isSwitching) return;
   isSwitching = true;
@@ -457,19 +498,15 @@ async function switchStsSourcePreservePosition(newUrl) {
     const wasPlaying = !stsAudioEl.paused && !stsAudioEl.ended;
     const oldTime = stsAudioEl.currentTime || 0;
 
-    // If already on the same URL, do nothing
     if (stsAudioEl.src === newUrl) {
       isSwitching = false;
       return;
     }
 
-    // Pause while switching to avoid glitches
-    try { stsAudioEl.pause(); } catch(e) {}
+    try { stsAudioEl.pause(); } catch (e) {}
 
-    // Swap source
     stsAudioEl.src = newUrl;
 
-    // Wait for metadata so we know duration and can seek safely
     await new Promise((resolve, reject) => {
       const onLoaded = () => {
         stsAudioEl.removeEventListener('loadedmetadata', onLoaded);
@@ -483,25 +520,21 @@ async function switchStsSourcePreservePosition(newUrl) {
       };
       stsAudioEl.addEventListener('loadedmetadata', onLoaded, { once: true });
       stsAudioEl.addEventListener('error', onError, { once: true });
-      // Kick load in some browsers
       stsAudioEl.load();
     });
 
-    // Clamp currentTime to new duration if needed
     const duration = isFinite(stsAudioEl.duration) ? stsAudioEl.duration : Number.MAX_SAFE_INTEGER;
-    const targetTime = Math.min(oldTime, duration - 0.05); // small epsilon to avoid edge
+    const targetTime = Math.min(oldTime, Math.max(0, duration - 0.05));
     if (targetTime > 0) {
-      try { stsAudioEl.currentTime = targetTime; } catch (e) { /* ignore */ }
+      try { stsAudioEl.currentTime = targetTime; } catch (e) {}
     }
 
-    // Resume play state
     if (wasPlaying) {
       try {
         await stsAudioEl.play();
         updateStsIcons(true);
       } catch (e) {
         updateStsIcons(false);
-        // Autoplay may be blocked; leave paused
       }
     } else {
       updateStsIcons(false);
@@ -514,28 +547,26 @@ async function switchStsSourcePreservePosition(newUrl) {
   }
 }
 
-// Prime initial source (English by default if toggle off)
+// Initialize with English_<Speaker> for the selected language (toggle OFF behavior)
 (async function initSts() {
   updateStsIcons(false);
   const initialUrl = resolveStsAudioUrl();
   await switchStsSourcePreservePosition(initialUrl);
 })();
 
-// Play/pause button handler
+// Play/pause
 if (stsPlayPauseBtn) {
   stsPlayPauseBtn.addEventListener('click', async () => {
     const desiredUrl = resolveStsAudioUrl();
-    // If URL out-of-date, switch and start playing
     if (stsAudioEl.src !== desiredUrl) {
       await switchStsSourcePreservePosition(desiredUrl);
       if (stsAudioEl.paused) {
-        try { await stsAudioEl.play(); } catch(e) {}
+        try { await stsAudioEl.play(); } catch (e) {}
       }
       updateStsIcons(!stsAudioEl.paused);
       return;
     }
 
-    // Toggle play/pause
     if (stsAudioEl.paused) {
       try {
         await stsAudioEl.play();
@@ -551,15 +582,15 @@ if (stsPlayPauseBtn) {
   });
 }
 
-// Switch on language change (preserve time, keep paused/playing state)
-stsLanguageRadios.forEach(r => {
+// React to language change
+(Array.from(stsLanguageRadios) || []).forEach(r => {
   r.addEventListener('change', async () => {
     const newUrl = resolveStsAudioUrl();
     await switchStsSourcePreservePosition(newUrl);
   });
 });
 
-// Switch on toggle change (preserve time, keep paused/playing state)
+// React to toggle change
 if (stsToggle) {
   stsToggle.addEventListener('change', async () => {
     const newUrl = resolveStsAudioUrl();
@@ -567,7 +598,6 @@ if (stsToggle) {
   });
 }
 
-// Keep icons in sync when track ends
 stsAudioEl.onended = () => updateStsIcons(false);
 
 
