@@ -1,9 +1,11 @@
 document.addEventListener("DOMContentLoaded", function () {
+
   const MAX_RECORDING_TIME = 30000;
+
   let isRecording = false;
   let mediaRecorder = null;
   let audioChunks = [];
-  let audio = null;
+  let audio = null; // TTS audio instance
   let recordingTimerInterval = null;
 
   // DOM elements for ASR
@@ -32,15 +34,14 @@ document.addEventListener("DOMContentLoaded", function () {
   const pauseButton = document.getElementById("pause-tts");
   const ttsLanguageRadios = document.querySelectorAll('input[name="TTS-Language"]');
 
-
-  // ASR UI state management functions
+  // ASR UI state management
   function showInitialState() {
     if (startAsrBlock) startAsrBlock.style.display = 'block';
     if (asrLoaderBlock) asrLoaderBlock.style.display = 'none';
     if (pauseAsrBlock) pauseAsrBlock.style.display = 'none';
     if (asrResultBlock) asrResultBlock.style.display = 'none';
   }
-  
+
   function showRecordingState() {
     if (startAsrBlock) startAsrBlock.style.display = 'none';
     if (asrLoaderBlock) asrLoaderBlock.style.display = 'none';
@@ -54,7 +55,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (pauseAsrBlock) pauseAsrBlock.style.display = 'none';
     if (asrResultBlock) asrResultBlock.style.display = 'none';
   }
-  
+
   function showResultState(transcript, language) {
     if (startAsrBlock) startAsrBlock.style.display = 'none';
     if (asrLoaderBlock) asrLoaderBlock.style.display = 'none';
@@ -63,7 +64,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (transcriptDisplay) transcriptDisplay.textContent = transcript;
     if (languageDisplay) languageDisplay.textContent = language;
   }
-  
+
   showInitialState();
 
   if (startButton && stopButton && transcriptDisplay) {
@@ -91,15 +92,15 @@ document.addEventListener("DOMContentLoaded", function () {
   };
 
   const languageModels = {
-      "Hindi": "mix-IN",
-      "English": "mix-IN",
-      "Bengali": "mix-IN",
-      "Marathi": "mix-IN",
-      "Kannada": "mix-IN",
-      "Tamil": "mix-IN",
+    "Hindi": "mix-IN",
+    "English": "mix-IN",
+    "Bengali": "mix-IN",
+    "Marathi": "mix-IN",
+    "Kannada": "mix-IN",
+    "Tamil": "mix-IN",
   };
 
-  // TTS UI state management functions
+  // TTS UI state management
   function showTtsInputScreen() {
     if (ttsInputScreen) ttsInputScreen.style.display = 'block';
     if (ttsResultScreen) ttsResultScreen.style.display = 'none';
@@ -128,113 +129,115 @@ document.addEventListener("DOMContentLoaded", function () {
   // TTS Logic
   // ===================================================================
   if (ttsInputButton && ttsTextField) {
-      ttsInputButton.addEventListener("click", async function (e) {
-        e.preventDefault();
-        console.log("Button clicked!");
+    ttsInputButton.addEventListener("click", async function (e) {
+      e.preventDefault();
+      console.log("Button clicked!");
 
-        const text = ttsTextField.value.trim();
-        if (!text) {
-          console.log("Text field is empty, returning.");
-          return;
+      const text = ttsTextField.value.trim();
+      if (!text) {
+        console.log("Text field is empty, returning.");
+        return;
+      }
+
+      const selectedVoiceElement = document.querySelector('input[name="TTS-Voice"]:checked');
+      const selectedLanguageElement = document.querySelector('input[name="TTS-Language"]:checked');
+
+      const selectedVoiceName = selectedVoiceElement ? selectedVoiceElement.id : 'Divya';
+      const selectedLanguageName = selectedLanguageElement ? selectedLanguageElement.id : 'English';
+
+      const voiceInfo = voiceMapping[selectedVoiceName];
+      const apiVoiceName = voiceInfo ? voiceInfo.voice_name : 'hi_female_1';
+      const language = voiceInfo ? voiceInfo.language : 'Hindi';
+
+      console.log(`Selected Voice Name: ${selectedVoiceName}`);
+      console.log(`API Voice Name: ${apiVoiceName}`);
+
+      showTtsProcessingState();
+
+      try {
+        const payload = {
+          text: text,
+          model: languageModels[selectedLanguageName],
+          audio_bytes: null,
+          sample_rate: 22050,
+          voice_name: apiVoiceName,
+          params: {
+            stream_chunk_size: 120,
+            speed: 1
+          }
+        };
+        console.log("Making API call with payload:", payload);
+
+        const response = await fetch("https://ttsplayground-bk.gnani.site/api/v1/api/file/process", {
+          method: "POST",
+          headers: {
+            "Accept": "*/*",
+            "Content-Type": "application/json",
+            "Origin": "https://gnani-ai.webflow.io",
+            "Referer": "https://gnani-ai.webflow.io/",
+            "x-request-id": crypto.randomUUID()
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`TTS API request failed: ${response.statusText}. Details: ${errorText}`);
+        }
+        console.log("TTS API Success!");
+
+        const responseText = await response.text();
+        const base64Data = responseText.replace(/^"|"$/g, "");
+        const binaryString = atob(base64Data);
+        const pcmBytes = new Int16Array(binaryString.length / 2);
+        for (let i = 0; i < binaryString.length / 2; i++) {
+          pcmBytes[i] = (binaryString.charCodeAt(i * 2 + 1) << 8) | binaryString.charCodeAt(i * 2);
         }
 
-        const selectedVoiceElement = document.querySelector('input[name="TTS-Voice"]:checked');
-        const selectedLanguageElement = document.querySelector('input[name="TTS-Language"]:checked');
-        
-        const selectedVoiceName = selectedVoiceElement ? selectedVoiceElement.id : 'Divya';
-        const selectedLanguageName = selectedLanguageElement ? selectedLanguageElement.id : 'English';
+        const wavBlob = createWavBlob(pcmBytes, 22050, 1, 16);
+        const audioUrl = URL.createObjectURL(wavBlob);
 
-        const voiceInfo = voiceMapping[selectedVoiceName];
-        const apiVoiceName = voiceInfo ? voiceInfo.voice_name : 'hi_female_1';
-        const language = voiceInfo ? voiceInfo.language : 'Hindi';
+        audio = new Audio(audioUrl);
 
-        console.log(`Selected Voice Name: ${selectedVoiceName}`);
-        console.log(`API Voice Name: ${apiVoiceName}`);
-        
-        showTtsProcessingState();
+        audio.onended = function () {
+          if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
+          if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
+        };
 
-        try {
-          const payload = {
-            text: text,
-            model: languageModels[selectedLanguageName],
-            audio_bytes: null,
-            sample_rate: 22050, 
-            voice_name: apiVoiceName,
-            params: {
-              stream_chunk_size: 120,
-              speed: 1
-            }
-          };
-          console.log("Making API call with payload:", payload);
+        showTtsResultState(text, selectedVoiceName, language);
+      } catch (err) {
+        console.error("TTS Error:", err);
+        showTtsInputScreen();
+        alert("Error generating audio. Please try again.");
+      }
+    });
 
-          const response = await fetch("https://ttsplayground-bk.gnani.site/api/v1/api/file/process", {
-            method: "POST",
-            headers: {
-              "Accept": "*/*",
-              "Content-Type": "application/json",
-              "Origin": "https://gnani-ai.webflow.io",
-              "Referer": "https://gnani-ai.webflow.io/",
-              "x-request-id": crypto.randomUUID()
-            },
-            body: JSON.stringify(payload)
+    if (playButton) {
+      playButton.addEventListener("click", function () {
+        if (audio) {
+          audio.play().catch(err => {
+            console.error("Audio playback error:", err);
           });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`TTS API request failed: ${response.statusText}. Details: ${errorText}`);
-          }
-          console.log("TTS API Success!");
-
-          const responseText = await response.text();
-          const base64Data = responseText.replace(/^"|"$/g, "");
-          const binaryString = atob(base64Data);
-          const pcmBytes = new Int16Array(binaryString.length / 2);
-          for (let i = 0; i < binaryString.length / 2; i++) {
-            pcmBytes[i] = (binaryString.charCodeAt(i * 2 + 1) << 8) | binaryString.charCodeAt(i * 2);
-          }
-
-          const wavBlob = createWavBlob(pcmBytes, 22050, 1, 16);
-          const audioUrl = URL.createObjectURL(wavBlob);
-
-          audio = new Audio(audioUrl);
-
-          audio.onended = function () {
-            if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
-            if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
-          };
-          
-          showTtsResultState(text, selectedVoiceName, language);
-        } catch (err) {
-          console.error("TTS Error:", err);
-          showTtsInputScreen();
-          alert("Error generating audio. Please try again.");
+          if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'none';
+          if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'grid';
         }
       });
+    }
 
-      if (playButton) {
-        playButton.addEventListener("click", function () {
-          if (audio) {
-            audio.play().catch(err => {
-              console.error("Audio playback error:", err);
-            });
-            if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'none';
-            if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'grid';
-          }
-        });
-      }
-
-      if (pauseButton) {
-        pauseButton.addEventListener("click", function () {
-          if (audio && !audio.paused) {
-            audio.pause();
-            if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
-            if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
-          }
-        });
-      }
+    if (pauseButton) {
+      pauseButton.addEventListener("click", function () {
+        if (audio && !audio.paused) {
+          audio.pause();
+          if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
+          if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
+        }
+      });
+    }
   }
 
-
+  // ===================================================================
+  // ASR Logic
+  // ===================================================================
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -250,7 +253,7 @@ document.addEventListener("DOMContentLoaded", function () {
       mediaRecorder.start();
       isRecording = true;
       showRecordingState();
-      
+
       let timeLeft = MAX_RECORDING_TIME / 1000;
       if (asrTimerDisplay) asrTimerDisplay.textContent = `00:${String(timeLeft).padStart(2, '0')}`;
       recordingTimerInterval = setInterval(() => {
@@ -271,16 +274,16 @@ document.addEventListener("DOMContentLoaded", function () {
   function stopRecording() {
     if (mediaRecorder && isRecording) {
       const stream = mediaRecorder.stream;
-      
+
       mediaRecorder.stop();
       isRecording = false;
       clearInterval(recordingTimerInterval);
-  
+
       showProcessingState();
-  
+
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(track => track.stop());
-  
+
         const recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
         await processAudio(recordedBlob);
       };
@@ -294,9 +297,9 @@ document.addEventListener("DOMContentLoaded", function () {
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
       const resampledAudioBuffer = await resampleAudio(audioBuffer, 16000);
-      
+
       const pcm16Data = convertToPCM16(resampledAudioBuffer);
-      
+
       const wavBlob = createWavBlob(pcm16Data, 16000, 1, 16);
 
       const formData = new FormData();
@@ -342,21 +345,20 @@ document.addEventListener("DOMContentLoaded", function () {
 
     return pcmData;
   }
-  
+
   function resampleAudio(audioBuffer, targetSampleRate) {
     const numberOfChannels = audioBuffer.numberOfChannels;
     const oldSampleRate = audioBuffer.sampleRate;
     const newLength = Math.round(audioBuffer.length * targetSampleRate / oldSampleRate);
-    
+
     const offlineContext = new OfflineAudioContext(numberOfChannels, newLength, targetSampleRate);
     const bufferSource = offlineContext.createBufferSource();
     bufferSource.buffer = audioBuffer;
     bufferSource.connect(offlineContext.destination);
     bufferSource.start();
-    
+
     return offlineContext.startRendering();
   }
-
 
   function createWavBlob(pcmBytes, sampleRate = 8000, numChannels = 1, bitsPerSample = 16) {
     const blockAlign = numChannels * bitsPerSample / 8;
@@ -395,93 +397,179 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
 
-  // ===================================================================
-  // Phone Call Trigger Logic with Rate Limiting
-  // ===================================================================
-  const callTriggerForm = document.getElementById('wf-form-Home-Hero-Demo');
-  const phoneInputField = document.getElementById('hero-form-field');
-  const callSubmitButton = document.getElementById('hero-form-button');
+// ==============================
+// STS Demo Audio with Seamless Switching
+// ==============================
 
-  if (callTriggerForm && phoneInputField && callSubmitButton) {
-    callTriggerForm.addEventListener("submit", async function (e) {
-      e.preventDefault();
+// Commit-pinned base to your repo
+const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/webflow-cnd-script@c1a92ba7a7133684d661c0a9351e2fc89bc989f8/';
 
-      const phoneNumber = phoneInputField.value.trim();
-      if (!/^\d{10}$/.test(phoneNumber)) {
-        return;
-      }
+// Map language (by radio id/value) to file name
+const stsLanguageToFile = {
+  English: 'English_Blondie.mp3',
+  German: 'German_Blondie.mp3',
+  Spanish: 'Spanish_Blondie.mp3',
+};
 
-      const now = Date.now();
-      const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
-      const MAX_CALLS = 10;
-      const rateLimitStorageKey = 'apiCallRateLimit';
-      let callData = JSON.parse(localStorage.getItem(rateLimitStorageKey));
-      
-      const originalButtonTextContainer = callSubmitButton.querySelector('.hover-text:not(.cloned-text)');
-      if (!originalButtonTextContainer) {
-          return;
-      }
+// Elements for STS player
+const stsLanguageRadios = document.querySelectorAll('input[name="STS-Language"]');
+const stsToggle = document.getElementById('sts-check'); // checkbox: Without (off) / With (on)
+const stsPlayPauseBtn = document.getElementById('sts-play-pause');
+const stsPlayIcon = document.getElementById('sts-play-icon');
+const stsPauseIcon = document.getElementById('sts-pause-icon');
 
-      if (callData && (now - callData.timestamp > TEN_MINUTES_IN_MS)) {
-        callData = null;
-        localStorage.removeItem(rateLimitStorageKey);
-      }
+// Single shared audio element
+let stsAudioEl = new Audio();
+// Hint the browser to prefetch
+stsAudioEl.preload = 'auto';
 
-      if (!callData) {
-        callData = { count: 0, timestamp: 0 };
-      }
+let isSwitching = false; // debounce switching to avoid flapping
 
-      if (callData.count >= MAX_CALLS) {
-        originalButtonTextContainer.textContent = "Limit Reached";
-        callSubmitButton.disabled = true;
-        setTimeout(() => {
-            callSubmitButton.disabled = false;
-        }, TEN_MINUTES_IN_MS);
-        return;
-      }
+function updateStsIcons(isPlaying) {
+  if (stsPlayIcon) stsPlayIcon.style.display = isPlaying ? 'none' : 'block';
+  if (stsPauseIcon) stsPauseIcon.style.display = isPlaying ? 'block' : 'none';
+}
 
-      const originalButtonText = originalButtonTextContainer.textContent;
-      const waitText = callSubmitButton.getAttribute('data-wait') || "Please wait...";
-      originalButtonTextContainer.textContent = waitText;
-      callSubmitButton.disabled = true;
+function getSelectedStsLanguage() {
+  const checked = Array.from(stsLanguageRadios).find(r => r.checked);
+  if (checked) return checked.id || checked.value || 'English';
+  const title = document.getElementById('sts-language-title');
+  return (title && title.textContent.trim()) || 'English';
+}
 
-      try {
-        const response = await fetch('https://api.inya.ai/genbots/website_trigger_call/11b6b4f44d0b4f12ad51dccb500f8aed', {
-          method: 'POST',
-          headers: {
-            'accept': 'application/json',
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            phone: phoneNumber,
-            name: "",
-            countryCode: "+91"
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`API request failed: ${response.status} ${response.statusText}. Details: ${errorText}`);
-        }
-
-        const result = await response.json();
-        originalButtonTextContainer.textContent = "Success!";
-
-        if (callData.count === 0) {
-            callData.timestamp = Date.now();
-        }
-        callData.count++;
-        localStorage.setItem(rateLimitStorageKey, JSON.stringify(callData));
-
-      } catch (error) {
-        originalButtonTextContainer.textContent = "Failed!";
-
-      } finally {
-        setTimeout(() => {
-            originalButtonTextContainer.textContent = originalButtonText;
-            callSubmitButton.disabled = false;
-        }, 3000);
-      }
-    });
+function resolveStsAudioUrl() {
+  // If toggle is OFF (Without Gnani), always English
+  if (!stsToggle || !stsToggle.checked) {
+    return AUDIO_CDN_BASE + stsLanguageToFile.English;
   }
+  // If toggle is ON (With Gnani), use selected language; default to English
+  const lang = getSelectedStsLanguage();
+  const filename = stsLanguageToFile[lang] || stsLanguageToFile.English;
+  return AUDIO_CDN_BASE + filename;
+}
+
+// Load URL preserving time and play/pause state
+async function switchStsSourcePreservePosition(newUrl) {
+  if (isSwitching) return;
+  isSwitching = true;
+
+  try {
+    const wasPlaying = !stsAudioEl.paused && !stsAudioEl.ended;
+    const oldTime = stsAudioEl.currentTime || 0;
+
+    // If already on the same URL, do nothing
+    if (stsAudioEl.src === newUrl) {
+      isSwitching = false;
+      return;
+    }
+
+    // Pause while switching to avoid glitches
+    try { stsAudioEl.pause(); } catch(e) {}
+
+    // Swap source
+    stsAudioEl.src = newUrl;
+
+    // Wait for metadata so we know duration and can seek safely
+    await new Promise((resolve, reject) => {
+      const onLoaded = () => {
+        stsAudioEl.removeEventListener('loadedmetadata', onLoaded);
+        stsAudioEl.removeEventListener('error', onError);
+        resolve();
+      };
+      const onError = (e) => {
+        stsAudioEl.removeEventListener('loadedmetadata', onLoaded);
+        stsAudioEl.removeEventListener('error', onError);
+        reject(e);
+      };
+      stsAudioEl.addEventListener('loadedmetadata', onLoaded, { once: true });
+      stsAudioEl.addEventListener('error', onError, { once: true });
+      // Kick load in some browsers
+      stsAudioEl.load();
+    });
+
+    // Clamp currentTime to new duration if needed
+    const duration = isFinite(stsAudioEl.duration) ? stsAudioEl.duration : Number.MAX_SAFE_INTEGER;
+    const targetTime = Math.min(oldTime, duration - 0.05); // small epsilon to avoid edge
+    if (targetTime > 0) {
+      try { stsAudioEl.currentTime = targetTime; } catch (e) { /* ignore */ }
+    }
+
+    // Resume play state
+    if (wasPlaying) {
+      try {
+        await stsAudioEl.play();
+        updateStsIcons(true);
+      } catch (e) {
+        updateStsIcons(false);
+        // Autoplay may be blocked; leave paused
+      }
+    } else {
+      updateStsIcons(false);
+    }
+  } catch (err) {
+    console.warn('STS seamless switch failed:', err);
+    updateStsIcons(false);
+  } finally {
+    isSwitching = false;
+  }
+}
+
+// Prime initial source (English by default if toggle off)
+(async function initSts() {
+  updateStsIcons(false);
+  const initialUrl = resolveStsAudioUrl();
+  await switchStsSourcePreservePosition(initialUrl);
+})();
+
+// Play/pause button handler
+if (stsPlayPauseBtn) {
+  stsPlayPauseBtn.addEventListener('click', async () => {
+    const desiredUrl = resolveStsAudioUrl();
+    // If URL out-of-date, switch and start playing
+    if (stsAudioEl.src !== desiredUrl) {
+      await switchStsSourcePreservePosition(desiredUrl);
+      if (stsAudioEl.paused) {
+        try { await stsAudioEl.play(); } catch(e) {}
+      }
+      updateStsIcons(!stsAudioEl.paused);
+      return;
+    }
+
+    // Toggle play/pause
+    if (stsAudioEl.paused) {
+      try {
+        await stsAudioEl.play();
+        updateStsIcons(true);
+      } catch (err) {
+        console.warn('STS audio play failed:', err);
+        updateStsIcons(false);
+      }
+    } else {
+      stsAudioEl.pause();
+      updateStsIcons(false);
+    }
+  });
+}
+
+// Switch on language change (preserve time, keep paused/playing state)
+stsLanguageRadios.forEach(r => {
+  r.addEventListener('change', async () => {
+    const newUrl = resolveStsAudioUrl();
+    await switchStsSourcePreservePosition(newUrl);
+  });
 });
+
+// Switch on toggle change (preserve time, keep paused/playing state)
+if (stsToggle) {
+  stsToggle.addEventListener('change', async () => {
+    const newUrl = resolveStsAudioUrl();
+    await switchStsSourcePreservePosition(newUrl);
+  });
+}
+
+// Keep icons in sync when track ends
+stsAudioEl.onended = () => updateStsIcons(false);
+
+
+});
+
