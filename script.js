@@ -401,19 +401,61 @@ document.addEventListener("DOMContentLoaded", function () {
 // STS Demo Audio with Seamless Switching (multi-speaker, robust)
 // ==============================
 
-const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/webflow-cnd-script@3790c61bb841914a1ff291627ca71d64a45d3ec3/';
+const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/webflow-cnd-script@f916764dd08da7d3216b9afbef970aac54b974b6/';
 
-// Speakers and routing by selected target language
-function speakerForLanguage(lang) {
-  const L = (lang || '').trim();
-  if (['German', 'Spanish'].includes(L)) return 'Blondie';
-  if (L === 'French') return 'Matt';
-  if (['Kannada', 'Malayalam', 'Marathi'].includes(L)) return 'Raju';
-  if (['Hindi', 'Bengali', 'Tamil'].includes(L)) return 'Shakuntala';
-  return 'Blondie'; // default
+// 1) Normalize language key from DOM
+function normalizeLanguage(raw) {
+  if (!raw) return 'English';
+  let s = String(raw).trim();
+
+  // Strip Webflow numeric suffixes (e.g., "Kannada-2" -> "Kannada")
+  s = s.replace(/-+\d+$/g, '');
+
+  // Canonical aliases (lowercase keys)
+  const aliasMap = {
+    english: 'English',
+    german: 'German',
+    spanish: 'Spanish',
+    french: 'French',
+    kannada: 'Kannada',
+    malayalam: 'Malayalam',
+    marathi: 'Marathi',
+    hindi: 'Hindi',
+    bengali: 'Bengali',
+    tamil: 'Tamil',
+
+    // Localized labels from your markup
+    'ಕನ್ನಡ': 'Kannada',
+    'മലയാളം': 'Malayalam',
+    'मराठी': 'Marathi',
+    'हिंदी': 'Hindi',
+    'বাংলা': 'Bengali',
+    'தமிழ்': 'Tamil',
+    'français': 'French',
+    'deutsch': 'German',
+    'español': 'Spanish',
+  };
+
+  const lower = s.toLowerCase();
+  if (aliasMap[lower]) return aliasMap[lower];
+  if (aliasMap[s]) return aliasMap[s];
+
+  // Title-case fallback (kannada -> Kannada)
+  s = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+  return aliasMap[s] || s;
 }
 
-// Per-speaker files (add only those you have; fallback covers the rest)
+// 2) Map normalized language to speaker
+function speakerForLanguage(langRaw) {
+  const L = normalizeLanguage(langRaw);
+  if (L === 'German' || L === 'Spanish') return 'Blondie';
+  if (L === 'French') return 'Matt';
+  if (L === 'Kannada' || L === 'Malayalam' || L === 'Marathi') return 'Raju';
+  if (L === 'Hindi' || L === 'Bengali' || L === 'Tamil') return 'Shakuntala';
+  return 'Blondie';
+}
+
+// 3) Files per speaker (add what you have; English fallback covers gaps)
 const stsFilesBySpeaker = {
   Blondie: {
     English: 'English_Blondie.mp3',
@@ -438,51 +480,54 @@ const stsFilesBySpeaker = {
   },
 };
 
-// Elements
+// 4) Elements
 const stsLanguageRadios = document.querySelectorAll('input[name="STS-Language"]');
 const stsToggle = document.getElementById('sts-check');
 const stsPlayPauseBtn = document.getElementById('sts-play-pause');
 const stsPlayIcon = document.getElementById('sts-play-icon');
 const stsPauseIcon = document.getElementById('sts-pause-icon');
 
-// Single audio element
+// 5) Audio element
 let stsAudioEl = new Audio();
 stsAudioEl.preload = 'auto';
-
 let isSwitching = false;
 
+// 6) Helpers
 function updateStsIcons(isPlaying) {
   if (stsPlayIcon) stsPlayIcon.style.display = isPlaying ? 'none' : 'block';
   if (stsPauseIcon) stsPauseIcon.style.display = isPlaying ? 'block' : 'none';
 }
 
 function getSelectedStsLanguage() {
-  // Prefer a checked radio
-  const checked = Array.from(stsLanguageRadios).find(r => r.checked);
-  if (checked) return (checked.id || checked.value || '').trim();
-  // Fallback to title text
-  const title = document.getElementById('sts-language-title');
-  if (title && title.textContent.trim()) return title.textContent.trim();
+  // Prefer checked radio VALUE (clean), then ID, then title
+  const radios = Array.from(document.querySelectorAll('input[name="STS-Language"]'));
+  const checked = radios.find(r => r.checked);
+  if (checked) return normalizeLanguage(checked.value || checked.id);
+
+  const titleEl = document.getElementById('sts-language-title');
+  if (titleEl && titleEl.textContent) return normalizeLanguage(titleEl.textContent);
+
   return 'English';
 }
 
 function resolveStsAudioUrl() {
-  const lang = getSelectedStsLanguage();
+  const raw = getSelectedStsLanguage();
+  const lang = normalizeLanguage(raw);
   const speaker = speakerForLanguage(lang);
   const files = stsFilesBySpeaker[speaker] || {};
-
-  // Toggle OFF: initial audio should be English_<Speaker>.mp3 (your requirement)
   const isWithGnani = !!(stsToggle && stsToggle.checked);
+
+  // Toggle OFF: English_<Speaker>.mp3
   if (!isWithGnani) {
-    const engFile = files.English
+    const eng = files.English
       || (stsFilesBySpeaker[speaker] && stsFilesBySpeaker[speaker].English)
       || 'English_Blondie.mp3';
-    return AUDIO_CDN_BASE + engFile;
+    return AUDIO_CDN_BASE + eng;
   }
 
-  // Toggle ON: try target language file first, else fallback to English_<Speaker>.mp3
-  const targetFile = files[lang];
-  if (targetFile) return AUDIO_CDN_BASE + targetFile;
+  // Toggle ON: target language file if available, else English_<Speaker>.mp3
+  const target = files[lang];
+  if (target) return AUDIO_CDN_BASE + target;
 
   const engFallback = files.English
     || (stsFilesBySpeaker[speaker] && stsFilesBySpeaker[speaker].English)
@@ -493,7 +538,6 @@ function resolveStsAudioUrl() {
 async function switchStsSourcePreservePosition(newUrl) {
   if (isSwitching) return;
   isSwitching = true;
-
   try {
     const wasPlaying = !stsAudioEl.paused && !stsAudioEl.ended;
     const oldTime = stsAudioEl.currentTime || 0;
@@ -530,12 +574,8 @@ async function switchStsSourcePreservePosition(newUrl) {
     }
 
     if (wasPlaying) {
-      try {
-        await stsAudioEl.play();
-        updateStsIcons(true);
-      } catch (e) {
-        updateStsIcons(false);
-      }
+      try { await stsAudioEl.play(); updateStsIcons(true); }
+      catch (e) { updateStsIcons(false); }
     } else {
       updateStsIcons(false);
     }
@@ -547,34 +587,27 @@ async function switchStsSourcePreservePosition(newUrl) {
   }
 }
 
-// Initialize with English_<Speaker> for the selected language (toggle OFF behavior)
+// 7) Init
 (async function initSts() {
   updateStsIcons(false);
   const initialUrl = resolveStsAudioUrl();
   await switchStsSourcePreservePosition(initialUrl);
 })();
 
-// Play/pause
+// 8) Events
 if (stsPlayPauseBtn) {
   stsPlayPauseBtn.addEventListener('click', async () => {
     const desiredUrl = resolveStsAudioUrl();
     if (stsAudioEl.src !== desiredUrl) {
       await switchStsSourcePreservePosition(desiredUrl);
-      if (stsAudioEl.paused) {
-        try { await stsAudioEl.play(); } catch (e) {}
-      }
+      if (stsAudioEl.paused) { try { await stsAudioEl.play(); } catch (e) {} }
       updateStsIcons(!stsAudioEl.paused);
       return;
     }
 
     if (stsAudioEl.paused) {
-      try {
-        await stsAudioEl.play();
-        updateStsIcons(true);
-      } catch (err) {
-        console.warn('STS audio play failed:', err);
-        updateStsIcons(false);
-      }
+      try { await stsAudioEl.play(); updateStsIcons(true); }
+      catch (err) { console.warn('STS audio play failed:', err); updateStsIcons(false); }
     } else {
       stsAudioEl.pause();
       updateStsIcons(false);
@@ -582,7 +615,6 @@ if (stsPlayPauseBtn) {
   });
 }
 
-// React to language change
 (Array.from(stsLanguageRadios) || []).forEach(r => {
   r.addEventListener('change', async () => {
     const newUrl = resolveStsAudioUrl();
@@ -590,7 +622,6 @@ if (stsPlayPauseBtn) {
   });
 });
 
-// React to toggle change
 if (stsToggle) {
   stsToggle.addEventListener('change', async () => {
     const newUrl = resolveStsAudioUrl();
