@@ -397,6 +397,95 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
 
+   // ===================================================================
+  // Phone Call Trigger Logic with Rate Limiting
+  // ===================================================================
+  const callTriggerForm = document.getElementById('wf-form-Home-Hero-Demo');
+  const phoneInputField = document.getElementById('hero-form-field');
+  const callSubmitButton = document.getElementById('hero-form-button');
+
+  if (callTriggerForm && phoneInputField && callSubmitButton) {
+    callTriggerForm.addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const phoneNumber = phoneInputField.value.trim();
+      if (!/^\d{10}$/.test(phoneNumber)) {
+        return;
+      }
+
+      const now = Date.now();
+      const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+      const MAX_CALLS = 10;
+      const rateLimitStorageKey = 'apiCallRateLimit';
+      let callData = JSON.parse(localStorage.getItem(rateLimitStorageKey));
+      
+      const originalButtonTextContainer = callSubmitButton.querySelector('.hover-text:not(.cloned-text)');
+      if (!originalButtonTextContainer) {
+          return;
+      }
+
+      if (callData && (now - callData.timestamp > TEN_MINUTES_IN_MS)) {
+        callData = null;
+        localStorage.removeItem(rateLimitStorageKey);
+      }
+
+      if (!callData) {
+        callData = { count: 0, timestamp: 0 };
+      }
+
+      if (callData.count >= MAX_CALLS) {
+        originalButtonTextContainer.textContent = "Limit Reached";
+        callSubmitButton.disabled = true;
+        setTimeout(() => {
+            callSubmitButton.disabled = false;
+        }, TEN_MINUTES_IN_MS);
+        return;
+      }
+      const originalButtonText = originalButtonTextContainer.textContent;
+      const waitText = callSubmitButton.getAttribute('data-wait') || "Please wait...";
+      originalButtonTextContainer.textContent = waitText;
+      callSubmitButton.disabled = true;
+
+      try {
+        const response = await fetch('https://api.inya.ai/genbots/website_trigger_call/11b6b4f44d0b4f12ad51dccb500f8aed', {
+          method: 'POST',
+          headers: {
+            'accept': 'application/json',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            phone: phoneNumber,
+            name: "",
+            countryCode: "+91"
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API request failed: ${response.status} ${response.statusText}. Details: ${errorText}`);
+        }
+        const result = await response.json();
+        originalButtonTextContainer.textContent = "Success!";
+
+        if (callData.count === 0) {
+            callData.timestamp = Date.now();
+        }
+        callData.count++;
+        localStorage.setItem(rateLimitStorageKey, JSON.stringify(callData));
+
+      } catch (error) {
+        originalButtonTextContainer.textContent = "Failed!";
+
+      } finally {
+        setTimeout(() => {
+            originalButtonTextContainer.textContent = originalButtonText;
+            callSubmitButton.disabled = false;
+        }, 3000);
+      }
+    });
+  }
+
+
 // ==============================
 // STS Demo Audio with Seamless Switching (multi-speaker, robust)
 // ==============================
