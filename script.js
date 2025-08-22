@@ -401,7 +401,7 @@ document.addEventListener("DOMContentLoaded", function () {
 // STS Demo Audio with Seamless Switching (multi-speaker, robust)
 // ==============================
 
-const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/webflow-cnd-script@f916764dd08da7d3216b9afbef970aac54b974b6/';
+const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@1c1bffc975f9342689f75e6144a9571f70e5947d/';
 
 // 1) Normalize language key from DOM
 function normalizeLanguage(raw) {
