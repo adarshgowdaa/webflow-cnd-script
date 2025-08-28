@@ -291,7 +291,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Reusable Audio Player Logic
   // ===================================================================
   function initAllAudioPlayers() {
-      const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@75dd0396adc4ad0a47f342e7773a3ebb4a1fdbbf/';
+      const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@dae636ff0f7e0fbeaa808cf51eb08f19c952ee47/';
       const allAudioPlayers = [];
 
       function createSwitchablePlayer(config) {
