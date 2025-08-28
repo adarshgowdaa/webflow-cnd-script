@@ -152,9 +152,9 @@ document.addEventListener("DOMContentLoaded", function () {
     function showState(state, data = {}) {
         const isResult = state === 'result';
         if (ttsInputScreen) ttsInputScreen.style.display = state === 'input' ? 'block' : 'none';
-        if (ttsResultScreen) ttsResultScreen.style.display = state !== 'input' ? 'grid' : 'none';
+        if (ttsResultScreen) ttsResultScreen.style.display = state !== 'input' ? 'flex' : 'none';
         if (ttsLoaderBlock) ttsLoaderBlock.style.display = state === 'processing' ? 'block' : 'none';
-        if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = isResult ? 'grid' : 'none';
+        if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = isResult ? 'flex' : 'none';
         if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
 
         if (isResult) {
@@ -192,7 +192,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const wavBlob = createWavBlob(pcmBytes, 22050);
             audio = new Audio(URL.createObjectURL(wavBlob));
             audio.onended = () => {
-                if(ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
+                if(ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'flex';
                 if(ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
             };
             showState('result', { text, person: selectedVoiceName, language: voiceInfo.language });
@@ -207,13 +207,13 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!audio) return;
         audio.play().catch(err => console.error("Audio playback error:", err));
         if(ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'none';
-        if(ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'grid';
+        if(ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'flex';
     });
 
     if (pauseButton) pauseButton.addEventListener("click", () => {
         if (audio && !audio.paused) {
           audio.pause();
-          if(ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
+          if(ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'flex';
           if(ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
         }
     });
@@ -253,7 +253,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         if (callData.count >= MAX_CALLS) {
-            // You might want to add a CSS class for this state as well
             console.warn("Rate limit reached.");
             return;
         }
@@ -278,7 +277,6 @@ document.addEventListener("DOMContentLoaded", function () {
         } finally {
             callSubmitButton.classList.remove('is-loading');
             
-            // Reset the button's state after 3 seconds
             setTimeout(() => {
                 callSubmitButton.classList.remove('is-success', 'is-failure');
                 callSubmitButton.disabled = false;
@@ -312,8 +310,8 @@ document.addEventListener("DOMContentLoaded", function () {
         let isSwitching = false;
         
         const updateIcons = (isPlaying) => {
-            if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'block';
-            if (pauseIcon) pauseIcon.style.display = isPlaying ? 'block' : 'none';
+            if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'flex';
+            if (pauseIcon) pauseIcon.style.display = isPlaying ? 'flex' : 'none';
         };
         const updateToggleLabel = () => {
           if (!otherLangLabel) return;
@@ -390,8 +388,8 @@ document.addEventListener("DOMContentLoaded", function () {
         allAudioPlayers.push(audioEl);
         
         const updateIcons = (isPlaying) => {
-            if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'block';
-            if (pauseIcon) pauseIcon.style.display = isPlaying ? 'block' : 'none';
+            if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'flex';
+            if (pauseIcon) pauseIcon.style.display = isPlaying ? 'flex' : 'none';
         };
 
         playPauseBtn.addEventListener('click', () => audioEl.paused ? audioEl.play() : audioEl.pause());
