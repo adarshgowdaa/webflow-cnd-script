@@ -490,7 +490,7 @@ document.addEventListener("DOMContentLoaded", function () {
 // STS Demo Audio with Seamless Switching (multi-speaker, robust)
 // ==============================
 
-const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@1c1bffc975f9342689f75e6144a9571f70e5947d/';
+const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@75dd0396adc4ad0a47f342e7773a3ebb4a1fdbbf/';
 
 // 1) Normalize language key from DOM
 function normalizeLanguage(raw) {
@@ -565,7 +565,7 @@ const stsFilesBySpeaker = {
     English: 'English_Shakuntala.mp3',
     Hindi: 'Hindi_Shakuntala.mp3',
     Bengali: 'Bengali_Shakuntala.mp3',
-    Tamil: 'Tamil_Shakuntala.mp3',
+    Tamil: 'Tamil_shakuntala.mp3',
   },
 };
 
@@ -575,6 +575,8 @@ const stsToggle = document.getElementById('sts-check');
 const stsPlayPauseBtn = document.getElementById('sts-play-pause');
 const stsPlayIcon = document.getElementById('sts-play-icon');
 const stsPauseIcon = document.getElementById('sts-pause-icon');
+const stsOtherLangLabel = document.getElementById('sts-other-lang');
+const stsSlider = document.getElementById('sts-slider'); // <-- NEW
 
 // 5) Audio element
 let stsAudioEl = new Audio();
@@ -608,9 +610,9 @@ function resolveStsAudioUrl() {
 
   // Toggle OFF: English_<Speaker>.mp3
   if (!isWithGnani) {
-    const eng = files.English
-      || (stsFilesBySpeaker[speaker] && stsFilesBySpeaker[speaker].English)
-      || 'English_Blondie.mp3';
+    const eng = files.English ||
+      (stsFilesBySpeaker[speaker] && stsFilesBySpeaker[speaker].English) ||
+      'English_Blondie.mp3';
     return AUDIO_CDN_BASE + eng;
   }
 
@@ -618,10 +620,20 @@ function resolveStsAudioUrl() {
   const target = files[lang];
   if (target) return AUDIO_CDN_BASE + target;
 
-  const engFallback = files.English
-    || (stsFilesBySpeaker[speaker] && stsFilesBySpeaker[speaker].English)
-    || 'English_Blondie.mp3';
+  const engFallback = files.English ||
+    (stsFilesBySpeaker[speaker] && stsFilesBySpeaker[speaker].English) ||
+    'English_Blondie.mp3';
   return AUDIO_CDN_BASE + engFallback;
+}
+
+function updateStsToggleLabel() {
+  const selectedRadio = document.querySelector('input[name="STS-Language"]:checked');
+  if (selectedRadio && stsOtherLangLabel) {
+    const labelSpan = selectedRadio.parentElement.querySelector('.technology_form-select-link-label');
+    if (labelSpan) {
+      stsOtherLangLabel.textContent = labelSpan.textContent;
+    }
+  }
 }
 
 async function switchStsSourcePreservePosition(newUrl) {
@@ -636,7 +648,9 @@ async function switchStsSourcePreservePosition(newUrl) {
       return;
     }
 
-    try { stsAudioEl.pause(); } catch (e) {}
+    try {
+      stsAudioEl.pause();
+    } catch (e) {}
 
     stsAudioEl.src = newUrl;
 
@@ -659,12 +673,18 @@ async function switchStsSourcePreservePosition(newUrl) {
     const duration = isFinite(stsAudioEl.duration) ? stsAudioEl.duration : Number.MAX_SAFE_INTEGER;
     const targetTime = Math.min(oldTime, Math.max(0, duration - 0.05));
     if (targetTime > 0) {
-      try { stsAudioEl.currentTime = targetTime; } catch (e) {}
+      try {
+        stsAudioEl.currentTime = targetTime;
+      } catch (e) {}
     }
 
     if (wasPlaying) {
-      try { await stsAudioEl.play(); updateStsIcons(true); }
-      catch (e) { updateStsIcons(false); }
+      try {
+        await stsAudioEl.play();
+        updateStsIcons(true);
+      } catch (e) {
+        updateStsIcons(false);
+      }
     } else {
       updateStsIcons(false);
     }
@@ -678,6 +698,7 @@ async function switchStsSourcePreservePosition(newUrl) {
 
 // 7) Init
 (async function initSts() {
+  updateStsToggleLabel();
   updateStsIcons(false);
   const initialUrl = resolveStsAudioUrl();
   await switchStsSourcePreservePosition(initialUrl);
@@ -689,14 +710,23 @@ if (stsPlayPauseBtn) {
     const desiredUrl = resolveStsAudioUrl();
     if (stsAudioEl.src !== desiredUrl) {
       await switchStsSourcePreservePosition(desiredUrl);
-      if (stsAudioEl.paused) { try { await stsAudioEl.play(); } catch (e) {} }
+      if (stsAudioEl.paused) {
+        try {
+          await stsAudioEl.play();
+        } catch (e) {}
+      }
       updateStsIcons(!stsAudioEl.paused);
       return;
     }
 
     if (stsAudioEl.paused) {
-      try { await stsAudioEl.play(); updateStsIcons(true); }
-      catch (err) { console.warn('STS audio play failed:', err); updateStsIcons(false); }
+      try {
+        await stsAudioEl.play();
+        updateStsIcons(true);
+      } catch (err) {
+        console.warn('STS audio play failed:', err);
+        updateStsIcons(false);
+      }
     } else {
       stsAudioEl.pause();
       updateStsIcons(false);
@@ -706,6 +736,7 @@ if (stsPlayPauseBtn) {
 
 (Array.from(stsLanguageRadios) || []).forEach(r => {
   r.addEventListener('change', async () => {
+    updateStsToggleLabel();
     const newUrl = resolveStsAudioUrl();
     await switchStsSourcePreservePosition(newUrl);
   });
@@ -718,8 +749,456 @@ if (stsToggle) {
   });
 }
 
-stsAudioEl.onended = () => updateStsIcons(false);
+// --- SLIDER LOGIC (NEW) ---
+if (stsSlider) {
+  // Update the slider's value as the audio plays
+  stsAudioEl.addEventListener('timeupdate', () => {
+    if (isFinite(stsAudioEl.duration)) {
+      stsSlider.value = stsAudioEl.currentTime / stsAudioEl.duration;
+    }
+  });
 
+  // Allow the user to seek (jump to a new position) by dragging the slider
+  stsSlider.addEventListener('input', () => {
+    if (isFinite(stsAudioEl.duration)) {
+      stsAudioEl.currentTime = stsSlider.value * stsAudioEl.duration;
+    }
+  });
+}
+
+// Update icons and reset slider when the audio finishes
+stsAudioEl.onended = () => {
+  updateStsIcons(false);
+  if (stsSlider) stsSlider.value = 0; // <-- Modified
+};
+
+// ===================================
+// Noise Cancellation Demo
+// ===================================
+
+// 1) Audio File Mapping
+const NOISE_AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@75dd0396adc4ad0a47f342e7773a3ebb4a1fdbbf/';
+const noiseFiles = {
+  'Office': {
+    original: 'Office.mp3',
+    neutralized: 'Office_Neutralized.mp3'
+  },
+  'Call Centre': {
+    original: 'Call_Center.mp3',
+    neutralized: 'Call_Center_Neutralized.mp3'
+  },
+  'Traffic': {
+    original: 'Traffic.mp3',
+    neutralized: 'Traffic_Neutralized.mp3'
+  }
+};
+
+// 2) Element Selection
+const noiseEnvRadios = document.querySelectorAll('input[name="Noise-Environment"]');
+const noiseToggle = document.getElementById('noise-check');
+const noisePlayPauseBtn = document.getElementById('noise-play-pause');
+const noisePlayIcon = document.getElementById('noise-play-icon');
+const noisePauseIcon = document.getElementById('noise-pause-icon');
+const noiseSlider = document.getElementById('noise-slider');
+
+// 3) Audio Element
+let noiseAudioEl = new Audio();
+noiseAudioEl.preload = 'auto';
+let isSwitchingNoise = false;
+
+// 4) Helpers
+function updateNoiseIcons(isPlaying) {
+  if (noisePlayIcon) noisePlayIcon.style.display = isPlaying ? 'none' : 'block';
+  if (noisePauseIcon) noisePauseIcon.style.display = isPlaying ? 'block' : 'none';
+}
+
+function resolveNoiseAudioUrl() {
+  const selectedRadio = document.querySelector('input[name="Noise-Environment"]:checked');
+  const environment = selectedRadio ? selectedRadio.value : 'Office'; // Default to Office
+  const isNeutralized = noiseToggle ? noiseToggle.checked : false;
+
+  const fileSet = noiseFiles[environment] || noiseFiles['Office'];
+  const fileName = isNeutralized ? fileSet.neutralized : fileSet.original;
+
+  return NOISE_AUDIO_CDN_BASE + fileName;
+}
+
+async function switchNoiseSourcePreservePosition(newUrl) {
+  if (isSwitchingNoise) return;
+  isSwitchingNoise = true;
+  try {
+    const wasPlaying = !noiseAudioEl.paused && !noiseAudioEl.ended;
+    const oldTime = noiseAudioEl.currentTime || 0;
+    if (noiseAudioEl.src === newUrl) {
+      isSwitchingNoise = false;
+      return;
+    }
+    try { noiseAudioEl.pause(); } catch (e) {}
+    noiseAudioEl.src = newUrl;
+    await new Promise((resolve, reject) => {
+      const onLoaded = () => {
+        noiseAudioEl.removeEventListener('loadedmetadata', onLoaded);
+        noiseAudioEl.removeEventListener('error', onError);
+        resolve();
+      };
+      const onError = (e) => {
+        noiseAudioEl.removeEventListener('loadedmetadata', onLoaded);
+        noiseAudioEl.removeEventListener('error', onError);
+        reject(e);
+      };
+      noiseAudioEl.addEventListener('loadedmetadata', onLoaded, { once: true });
+      noiseAudioEl.addEventListener('error', onError, { once: true });
+      noiseAudioEl.load();
+    });
+    const duration = isFinite(noiseAudioEl.duration) ? noiseAudioEl.duration : Number.MAX_SAFE_INTEGER;
+    const targetTime = Math.min(oldTime, Math.max(0, duration - 0.05));
+    if (targetTime > 0) {
+      try { noiseAudioEl.currentTime = targetTime; } catch (e) {}
+    }
+    if (wasPlaying) {
+      try { await noiseAudioEl.play(); updateNoiseIcons(true); }
+      catch (e) { updateNoiseIcons(false); }
+    } else {
+      updateNoiseIcons(false);
+    }
+  } catch (err) {
+    console.warn('Noise cancellation seamless switch failed:', err);
+    updateNoiseIcons(false);
+  } finally {
+    isSwitchingNoise = false;
+  }
+}
+
+// 5) Init
+(async function initNoiseCancellation() {
+  updateNoiseIcons(false);
+  if(noiseSlider) noiseSlider.value = 0;
+  const initialUrl = resolveNoiseAudioUrl();
+  await switchNoiseSourcePreservePosition(initialUrl);
+})();
+
+// 6) Events
+if (noisePlayPauseBtn) {
+  noisePlayPauseBtn.addEventListener('click', async () => {
+    const desiredUrl = resolveNoiseAudioUrl();
+    if (noiseAudioEl.src !== desiredUrl) {
+      await switchNoiseSourcePreservePosition(desiredUrl);
+      if (noiseAudioEl.paused) { try { await noiseAudioEl.play(); } catch (e) {} }
+      updateNoiseIcons(!noiseAudioEl.paused);
+      return;
+    }
+    if (noiseAudioEl.paused) {
+      try { await noiseAudioEl.play(); updateNoiseIcons(true); }
+      catch (err) {
+          console.warn('Noise audio play failed:', err);
+          updateNoiseIcons(false);
+      }
+    } else {
+      noiseAudioEl.pause();
+      updateNoiseIcons(false);
+    }
+  });
+}
+
+(Array.from(noiseEnvRadios) || []).forEach(r => {
+  r.addEventListener('change', async () => {
+    const newUrl = resolveNoiseAudioUrl();
+    await switchNoiseSourcePreservePosition(newUrl);
+  });
+});
+
+if (noiseToggle) {
+  noiseToggle.addEventListener('change', async () => {
+    const newUrl = resolveNoiseAudioUrl();
+    await switchNoiseSourcePreservePosition(newUrl);
+  });
+}
+
+noiseAudioEl.addEventListener('timeupdate', () => {
+  if (noiseSlider && isFinite(noiseAudioEl.duration)) {
+    const progressPercent = (noiseAudioEl.currentTime / noiseAudioEl.duration) * 100;
+    noiseSlider.value = progressPercent;
+  }
+});
+
+if (noiseSlider) {
+  noiseSlider.addEventListener('input', () => {
+    if (isFinite(noiseAudioEl.duration)) {
+      const newTime = (noiseSlider.value / 100) * noiseAudioEl.duration;
+      noiseAudioEl.currentTime = newTime;
+    }
+  });
+}
+
+noiseAudioEl.onended = () => {
+  updateNoiseIcons(false);
+  if (noiseSlider) {
+    noiseSlider.value = 0;
+  }
+};
+
+// ===================================
+// Accent Change Demo
+// ===================================
+
+// 1) Audio File Mapping
+const ACCENT_AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@75dd0396adc4ad0a47f342e7773a3ebb4a1fdbbf/';
+const accentFiles = {
+  'Sample 1': {
+    original: 'Indian_Accent_matt.mp3',
+    transformed: 'American English_matt.mp3'
+  },
+  'Sample 2': {
+    original: 'Indian_english_chris.mp3',
+    transformed: 'Australian english_chris.mp3'
+  },
+  'Sample 3': {
+    original: 'Indian_English_james.mp3',
+    transformed: 'British English_James.mp3'
+  }
+};
+
+// 2) Element Selection
+const accentRadios = document.querySelectorAll('input[name="Accent-Transformation"]');
+const accentToggle = document.getElementById('accent-check');
+const accentPlayPauseBtn = document.getElementById('accent-play-pause');
+const accentPlayIcon = document.getElementById('accent-play-icon');
+const accentPauseIcon = document.getElementById('accent-pause-icon');
+const accentSlider = document.getElementById('accent-slider');
+
+// 3) Audio Element
+let accentAudioEl = new Audio();
+accentAudioEl.preload = 'auto';
+let isSwitchingAccent = false;
+
+// 4) Helpers
+function updateAccentIcons(isPlaying) {
+  if (accentPlayIcon) accentPlayIcon.style.display = isPlaying ? 'none' : 'block';
+  if (accentPauseIcon) accentPauseIcon.style.display = isPlaying ? 'block' : 'none';
+}
+
+function resolveAccentAudioUrl() {
+  const selectedRadio = document.querySelector('input[name="Accent-Transformation"]:checked');
+  const sample = selectedRadio ? selectedRadio.value : 'Sample 1';
+  const isTransformed = accentToggle ? accentToggle.checked : false;
+
+  const fileSet = accentFiles[sample] || accentFiles['Sample 1'];
+  const fileName = isTransformed ? fileSet.transformed : fileSet.original;
+
+  return ACCENT_AUDIO_CDN_BASE + fileName;
+}
+
+async function switchAccentSourcePreservePosition(newUrl) {
+  if (isSwitchingAccent) return;
+  isSwitchingAccent = true;
+  try {
+    const wasPlaying = !accentAudioEl.paused && !accentAudioEl.ended;
+    const oldTime = accentAudioEl.currentTime || 0;
+    if (accentAudioEl.src === newUrl) {
+      isSwitchingAccent = false;
+      return;
+    }
+    try { accentAudioEl.pause(); } catch (e) {}
+    accentAudioEl.src = newUrl;
+    await new Promise((resolve, reject) => {
+      const onLoaded = () => {
+        accentAudioEl.removeEventListener('loadedmetadata', onLoaded);
+        accentAudioEl.removeEventListener('error', onError);
+        resolve();
+      };
+      const onError = (e) => {
+        accentAudioEl.removeEventListener('loadedmetadata', onLoaded);
+        accentAudioEl.removeEventListener('error', onError);
+        reject(e);
+      };
+      accentAudioEl.addEventListener('loadedmetadata', onLoaded, { once: true });
+      accentAudioEl.addEventListener('error', onError, { once: true });
+      accentAudioEl.load();
+    });
+    const duration = isFinite(accentAudioEl.duration) ? accentAudioEl.duration : Number.MAX_SAFE_INTEGER;
+    const targetTime = Math.min(oldTime, Math.max(0, duration - 0.05));
+    if (targetTime > 0) {
+      try { accentAudioEl.currentTime = targetTime; } catch (e) {}
+    }
+    if (wasPlaying) {
+      try { await accentAudioEl.play(); updateAccentIcons(true); }
+      catch (e) { updateAccentIcons(false); }
+    } else {
+      updateAccentIcons(false);
+    }
+  } catch (err) {
+    console.warn('Accent change seamless switch failed:', err);
+    updateAccentIcons(false);
+  } finally {
+    isSwitchingAccent = false;
+  }
+}
+
+// 5) Init
+(async function initAccentChange() {
+  updateAccentIcons(false);
+  if (accentSlider) accentSlider.value = 0;
+  const initialUrl = resolveAccentAudioUrl();
+  await switchAccentSourcePreservePosition(initialUrl);
+})();
+
+// 6) Events
+if (accentPlayPauseBtn) {
+  accentPlayPauseBtn.addEventListener('click', async () => {
+    const desiredUrl = resolveAccentAudioUrl();
+    if (accentAudioEl.src !== desiredUrl) {
+      await switchAccentSourcePreservePosition(desiredUrl);
+      if (accentAudioEl.paused) { try { await accentAudioEl.play(); } catch (e) {} }
+      updateAccentIcons(!accentAudioEl.paused);
+      return;
+    }
+    if (accentAudioEl.paused) {
+      try { await accentAudioEl.play(); updateAccentIcons(true); }
+      catch (err) { console.warn('Accent audio play failed:', err); updateAccentIcons(false); }
+    } else {
+      accentAudioEl.pause();
+      updateAccentIcons(false);
+    }
+  });
+}
+
+(Array.from(accentRadios) || []).forEach(r => {
+  r.addEventListener('change', async () => {
+    const newUrl = resolveAccentAudioUrl();
+    await switchAccentSourcePreservePosition(newUrl);
+  });
+});
+
+if (accentToggle) {
+  accentToggle.addEventListener('change', async () => {
+    const newUrl = resolveAccentAudioUrl();
+    await switchAccentSourcePreservePosition(newUrl);
+  });
+}
+
+accentAudioEl.addEventListener('timeupdate', () => {
+  if (accentSlider && isFinite(accentAudioEl.duration)) {
+    const progressPercent = (accentAudioEl.currentTime / accentAudioEl.duration) * 100;
+    accentSlider.value = progressPercent;
+  }
+});
+
+if (accentSlider) {
+  accentSlider.addEventListener('input', () => {
+    if (isFinite(accentAudioEl.duration)) {
+      const newTime = (accentSlider.value / 100) * accentAudioEl.duration;
+      accentAudioEl.currentTime = newTime;
+    }
+  });
+}
+
+accentAudioEl.onended = () => {
+  updateAccentIcons(false);
+  if (accentSlider) {
+    accentSlider.value = 0;
+  }
+};
+
+// ===================================
+// Barge-in Comparison Demo
+// ===================================
+
+// This function sets up a single, simple audio player.
+function setupSimplePlayer(config) {
+  const { playPauseBtnId, playIconId, pauseIconId, sliderId, audioUrl } = config;
+  
+  const playPauseBtn = document.getElementById(playPauseBtnId);
+  const playIcon = document.getElementById(playIconId);
+  const pauseIcon = document.getElementById(pauseIconId);
+  const slider = document.getElementById(sliderId);
+
+  // If essential elements don't exist, do nothing.
+  if (!playPauseBtn || !slider) {
+    return null;
+  }
+
+  const audioEl = new Audio(audioUrl);
+  audioEl.preload = 'auto';
+
+  // Helper function to update play/pause icons
+  const updateIcons = (isPlaying) => {
+    if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'block';
+    if (pauseIcon) pauseIcon.style.display = isPlaying ? 'block' : 'none';
+  };
+
+  // Add event listener to the play button
+  playPauseBtn.addEventListener('click', () => {
+    if (audioEl.paused) {
+      audioEl.play();
+    } else {
+      audioEl.pause();
+    }
+  });
+
+  // Update icons based on the audio's state
+  audioEl.onplay = () => updateIcons(true);
+  audioEl.onpause = () => updateIcons(false);
+
+  // Update slider as audio plays
+  audioEl.addEventListener('timeupdate', () => {
+    if (isFinite(audioEl.duration)) {
+      slider.value = (audioEl.currentTime / audioEl.duration) * 100;
+    }
+  });
+
+  // Allow seeking by dragging the slider
+  slider.addEventListener('input', () => {
+    if (isFinite(audioEl.duration)) {
+      audioEl.currentTime = (slider.value / 100) * audioEl.duration;
+    }
+  });
+
+  // Reset UI when the track ends
+  audioEl.onended = () => {
+    updateIcons(false);
+    slider.value = 0;
+  };
+
+  // Set initial UI state
+  updateIcons(false);
+  slider.value = 0;
+
+  return audioEl;
+}
+
+// --- Initialize Both Players ---
+const BARGE_AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@75dd0396adc4ad0a47f342e7773a3ebb4a1fdbbf/';
+
+const bargeAudioEl = setupSimplePlayer({
+  playPauseBtnId: 'barge-play-pause',
+  playIconId: 'barge-play-icon',
+  pauseIconId: 'barge-pause-icon',
+  sliderId: 'barge-slider',
+  audioUrl: BARGE_AUDIO_CDN_BASE + 'With _barge.mp3'
+});
+
+const noBargeAudioEl = setupSimplePlayer({
+  playPauseBtnId: 'nobarge-play-pause',
+  playIconId: 'nobarge-play-icon',
+  pauseIconId: 'nobarge-pause-icon',
+  sliderId: 'nobarge-slider',
+  audioUrl: BARGE_AUDIO_CDN_BASE + 'Without_barge.mp3'
+});
+
+// --- Add Logic to Pause One Player When the Other Plays ---
+if (bargeAudioEl && noBargeAudioEl) {
+  bargeAudioEl.addEventListener('play', () => {
+    if (!noBargeAudioEl.paused) {
+      noBargeAudioEl.pause();
+    }
+  });
+
+  noBargeAudioEl.addEventListener('play', () => {
+    if (!bargeAudioEl.paused) {
+      bargeAudioEl.pause();
+    }
+  });
+}
 
 });
 
