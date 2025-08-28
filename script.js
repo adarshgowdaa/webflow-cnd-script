@@ -1,1204 +1,522 @@
 document.addEventListener("DOMContentLoaded", function () {
-
-  const MAX_RECORDING_TIME = 30000;
-
-  let isRecording = false;
-  let mediaRecorder = null;
-  let audioChunks = [];
-  let audio = null; // TTS audio instance
-  let recordingTimerInterval = null;
-
-  // DOM elements for ASR
-  const startAsrBlock = document.getElementById('tsr-screen-1');
-  const pauseAsrBlock = document.getElementById('pause-asr-block');
-  const asrLoaderBlock = document.getElementById('asr-loader');
-  const asrResultBlock = document.querySelector('.technology_tsr-result');
-  const startButton = document.getElementById('start-asr');
-  const stopButton = document.getElementById('stop-asr');
-  const transcriptDisplay = document.getElementById('asr-live-transcription');
-  const languageDisplay = document.getElementById('asr-language-detected');
-  const asrTimerDisplay = document.getElementById('asr-timer');
-
-  // DOM elements for TTS
-  const ttsInputButton = document.getElementById("tts-input-button");
-  const ttsInputScreen = document.getElementById("tts-screen-1");
-  const ttsResultScreen = document.getElementById("integ2-screen2");
-  const ttsLoaderBlock = document.getElementById("tts-loader");
-  const ttsResultPlayBlock = document.getElementById("tts-result-play");
-  const ttsResultPauseBlock = document.getElementById("tts-result-pause");
-  const ttsTextField = document.getElementById("tts-input");
-  const ttsResultType = document.getElementById("tts-result-type");
-  const ttsResultPerson = document.getElementById("tts-result-preson");
-  const ttsResultLang = document.getElementById("tts-result-lang");
-  const playButton = document.getElementById("play-tts");
-  const pauseButton = document.getElementById("pause-tts");
-  const ttsLanguageRadios = document.querySelectorAll('input[name="TTS-Language"]');
-
-  // ASR UI state management
-  function showInitialState() {
-    if (startAsrBlock) startAsrBlock.style.display = 'block';
-    if (asrLoaderBlock) asrLoaderBlock.style.display = 'none';
-    if (pauseAsrBlock) pauseAsrBlock.style.display = 'none';
-    if (asrResultBlock) asrResultBlock.style.display = 'none';
-  }
-
-  function showRecordingState() {
-    if (startAsrBlock) startAsrBlock.style.display = 'none';
-    if (asrLoaderBlock) asrLoaderBlock.style.display = 'none';
-    if (pauseAsrBlock) pauseAsrBlock.style.display = 'flex';
-    if (asrResultBlock) asrResultBlock.style.display = 'none';
-  }
-
-  function showProcessingState() {
-    if (startAsrBlock) startAsrBlock.style.display = 'none';
-    if (asrLoaderBlock) asrLoaderBlock.style.display = 'flex';
-    if (pauseAsrBlock) pauseAsrBlock.style.display = 'none';
-    if (asrResultBlock) asrResultBlock.style.display = 'none';
-  }
-
-  function showResultState(transcript, language) {
-    if (startAsrBlock) startAsrBlock.style.display = 'none';
-    if (asrLoaderBlock) asrLoaderBlock.style.display = 'none';
-    if (pauseAsrBlock) pauseAsrBlock.style.display = 'none';
-    if (asrResultBlock) asrResultBlock.style.display = 'flex';
-    if (transcriptDisplay) transcriptDisplay.textContent = transcript;
-    if (languageDisplay) languageDisplay.textContent = language;
-  }
-
-  showInitialState();
-
-  if (startButton && stopButton && transcriptDisplay) {
-    startButton.addEventListener("click", function () {
-      if (!isRecording) {
-        startRecording();
-      }
-    });
-
-    stopButton.addEventListener("click", function () {
-      if (isRecording) {
-        stopRecording();
-      }
-    });
-  }
-
-  // TTS Voice and Language Mapping
-  const voiceMapping = {
-    "Divya": { voice_name: "hi_female_1", language: "Hindi", model: "mix-IN" },
-    "Anu": { voice_name: "hi_female_2", language: "Hindi", model: "mix-IN" },
-    "Disha": { voice_name: "hi_female_3", language: "Hindi", model: "mix-IN" },
-    "Arjun": { voice_name: "ravan", language: "Hindi", model: "mix-IN" },
-    "Claire": { voice_name: "en_female_1", language: "English", model: "mix-IN" },
-    "Mark": { voice_name: "en_male_2", language: "English", model: "mix-IN" },
-  };
-
-  const languageModels = {
-    "Hindi": "mix-IN",
-    "English": "mix-IN",
-    "Bengali": "mix-IN",
-    "Marathi": "mix-IN",
-    "Kannada": "mix-IN",
-    "Tamil": "mix-IN",
-  };
-
-  // TTS UI state management
-  function showTtsInputScreen() {
-    if (ttsInputScreen) ttsInputScreen.style.display = 'block';
-    if (ttsResultScreen) ttsResultScreen.style.display = 'none';
-  }
-
-  function showTtsProcessingState() {
-    if (ttsInputScreen) ttsInputScreen.style.display = 'none';
-    if (ttsResultScreen) ttsResultScreen.style.display = 'grid';
-    if (ttsLoaderBlock) ttsLoaderBlock.style.display = 'block';
-    if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'none';
-    if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
-  }
-
-  function showTtsResultState(text, person, language) {
-    if (ttsInputScreen) ttsInputScreen.style.display = 'none';
-    if (ttsResultScreen) ttsResultScreen.style.display = 'grid';
-    if (ttsLoaderBlock) ttsLoaderBlock.style.display = 'none';
-    if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
-    if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
-    if (ttsResultType) ttsResultType.textContent = text;
-    if (ttsResultPerson) ttsResultPerson.textContent = person;
-    if (ttsResultLang) ttsResultLang.textContent = language;
-  }
+  'use strict';
 
   // ===================================================================
-  // TTS Logic
+  // ASR (Automatic Speech Recognition) Logic
   // ===================================================================
-  if (ttsInputButton && ttsTextField) {
-    ttsInputButton.addEventListener("click", async function (e) {
-      e.preventDefault();
-      console.log("Button clicked!");
+  function initAsrLogic() {
+    const MAX_RECORDING_TIME = 30000;
+    let isRecording = false;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recordingTimerInterval = null;
 
-      const text = ttsTextField.value.trim();
-      if (!text) {
-        console.log("Text field is empty, returning.");
-        return;
-      }
+    const startAsrBlock = document.getElementById('tsr-screen-1');
+    const pauseAsrBlock = document.getElementById('pause-asr-block');
+    const asrLoaderBlock = document.getElementById('asr-loader');
+    const asrResultBlock = document.querySelector('.technology_tsr-result');
+    const startButton = document.getElementById('start-asr');
+    const stopButton = document.getElementById('stop-asr');
+    const transcriptDisplay = document.getElementById('asr-live-transcription');
+    const languageDisplay = document.getElementById('asr-language-detected');
+    const asrTimerDisplay = document.getElementById('asr-timer');
 
-      const selectedVoiceElement = document.querySelector('input[name="TTS-Voice"]:checked');
-      const selectedLanguageElement = document.querySelector('input[name="TTS-Language"]:checked');
-
-      const selectedVoiceName = selectedVoiceElement ? selectedVoiceElement.id : 'Divya';
-      const selectedLanguageName = selectedLanguageElement ? selectedLanguageElement.id : 'English';
-
-      const voiceInfo = voiceMapping[selectedVoiceName];
-      const apiVoiceName = voiceInfo ? voiceInfo.voice_name : 'hi_female_1';
-      const language = voiceInfo ? voiceInfo.language : 'Hindi';
-
-      console.log(`Selected Voice Name: ${selectedVoiceName}`);
-      console.log(`API Voice Name: ${apiVoiceName}`);
-
-      showTtsProcessingState();
-
-      try {
-        const payload = {
-          text: text,
-          model: languageModels[selectedLanguageName],
-          audio_bytes: null,
-          sample_rate: 22050,
-          voice_name: apiVoiceName,
-          params: {
-            stream_chunk_size: 120,
-            speed: 1
-          }
-        };
-        console.log("Making API call with payload:", payload);
-
-        const response = await fetch("https://ttsplayground-bk.gnani.site/api/v1/api/file/process", {
-          method: "POST",
-          headers: {
-            "Accept": "*/*",
-            "Content-Type": "application/json",
-            "Origin": "https://gnani-ai.webflow.io",
-            "Referer": "https://gnani-ai.webflow.io/",
-            "x-request-id": crypto.randomUUID()
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`TTS API request failed: ${response.statusText}. Details: ${errorText}`);
-        }
-        console.log("TTS API Success!");
-
-        const responseText = await response.text();
-        const base64Data = responseText.replace(/^"|"$/g, "");
-        const binaryString = atob(base64Data);
-        const pcmBytes = new Int16Array(binaryString.length / 2);
-        for (let i = 0; i < binaryString.length / 2; i++) {
-          pcmBytes[i] = (binaryString.charCodeAt(i * 2 + 1) << 8) | binaryString.charCodeAt(i * 2);
-        }
-
-        const wavBlob = createWavBlob(pcmBytes, 22050, 1, 16);
-        const audioUrl = URL.createObjectURL(wavBlob);
-
-        audio = new Audio(audioUrl);
-
-        audio.onended = function () {
-          if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
-          if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
-        };
-
-        showTtsResultState(text, selectedVoiceName, language);
-      } catch (err) {
-        console.error("TTS Error:", err);
-        showTtsInputScreen();
-        alert("Error generating audio. Please try again.");
-      }
-    });
-
-    if (playButton) {
-      playButton.addEventListener("click", function () {
-        if (audio) {
-          audio.play().catch(err => {
-            console.error("Audio playback error:", err);
-          });
-          if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'none';
-          if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'grid';
-        }
-      });
+    function showState(state) {
+      const states = {
+        initial: { start: 'block', loader: 'none', pause: 'none', result: 'none' },
+        recording: { start: 'none', loader: 'none', pause: 'flex', result: 'none' },
+        processing: { start: 'none', loader: 'flex', pause: 'none', result: 'none' },
+        result: { start: 'none', loader: 'none', pause: 'none', result: 'flex' }
+      };
+      const S = states[state] || states.initial;
+      if (startAsrBlock) startAsrBlock.style.display = S.start;
+      if (asrLoaderBlock) asrLoaderBlock.style.display = S.loader;
+      if (pauseAsrBlock) pauseAsrBlock.style.display = S.pause;
+      if (asrResultBlock) asrResultBlock.style.display = S.result;
     }
 
-    if (pauseButton) {
-      pauseButton.addEventListener("click", function () {
+    function showResult(transcript, language) {
+      showState('result');
+      if (transcriptDisplay) transcriptDisplay.textContent = transcript;
+      if (languageDisplay) languageDisplay.textContent = language;
+    }
+
+    async function processAudio(recordedBlob) {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const arrayBuffer = await recordedBlob.arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            const resampledAudioBuffer = await resampleAudio(audioBuffer, 16000);
+            const pcm16Data = convertToPCM16(resampledAudioBuffer);
+            const wavBlob = createWavBlob(pcm16Data, 16000);
+            
+            const formData = new FormData();
+            formData.append('audio_file', wavBlob, 'audio.wav');
+            formData.append('sampling_rate', '16000');
+            formData.append('language_code', 'bn-IN, en-IN, gu-IN, hi-IN, kn-IN, ml-IN, mr-IN, or-IN, pa-IN, ta-IN, te-IN');
+            formData.append('sender_id', crypto.randomUUID());
+
+            const response = await fetch('https://api.vachana.ai/stt/v3', { method: 'POST', body: formData });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API Error ${response.status}: ${errorText}`);
+            }
+            const result = await response.json();
+            if (result.success) {
+                const cleanTranscript = result.transcript.replace(/<[^>]+>/g, '').trim();
+                showResult(cleanTranscript || 'No transcription available', result.language_detected || 'Unknown');
+            } else {
+                showResult('Transcription failed', 'N/A');
+            }
+        } catch (error) {
+            console.error('Error processing audio:', error);
+            showResult('Error processing audio. Please try again.', 'N/A');
+        }
+    }
+
+    function stopRecording() {
+      if (!mediaRecorder || !isRecording) return;
+      mediaRecorder.stop();
+    }
+
+    async function startRecording() {
+      if (isRecording) return;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        mediaRecorder.ondataavailable = (event) => event.data.size > 0 && audioChunks.push(event.data);
+        
+        mediaRecorder.onstop = () => {
+          isRecording = false;
+          clearInterval(recordingTimerInterval);
+          stream.getTracks().forEach(track => track.stop());
+          showState('processing');
+          const recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          processAudio(recordedBlob);
+        };
+        
+        mediaRecorder.start();
+        isRecording = true;
+        showState('recording');
+
+        let timeLeft = MAX_RECORDING_TIME / 1000;
+        if (asrTimerDisplay) asrTimerDisplay.textContent = `00:${String(timeLeft).padStart(2, '0')}`;
+        recordingTimerInterval = setInterval(() => {
+            timeLeft--;
+            if (asrTimerDisplay) asrTimerDisplay.textContent = `00:${String(Math.max(0, timeLeft)).padStart(2, '0')}`;
+        }, 1000);
+
+        setTimeout(stopRecording, MAX_RECORDING_TIME);
+      } catch (error) {
+        console.error("Error starting recording:", error);
+        showResult("Error: Could not access microphone.", "N/A");
+      }
+    }
+    
+    if (startButton) startButton.addEventListener("click", startRecording);
+    if (stopButton) stopButton.addEventListener("click", stopRecording);
+
+    if(startAsrBlock) showState('initial');
+  }
+
+
+  // ===================================================================
+  // TTS (Text-to-Speech) Logic
+  // ===================================================================
+  function initTtsLogic() {
+    const ttsInputButton = document.getElementById("tts-input-button");
+    if (!ttsInputButton) return;
+    
+    let audio = null;
+    const ttsInputScreen = document.getElementById("tts-screen-1");
+    const ttsResultScreen = document.getElementById("integ2-screen2");
+    const ttsLoaderBlock = document.getElementById("tts-loader");
+    const ttsResultPlayBlock = document.getElementById("tts-result-play");
+    const ttsResultPauseBlock = document.getElementById("tts-result-pause");
+    const ttsTextField = document.getElementById("tts-input");
+    const ttsResultType = document.getElementById("tts-result-type");
+    const ttsResultPerson = document.getElementById("tts-result-preson");
+    const ttsResultLang = document.getElementById("tts-result-lang");
+    const playButton = document.getElementById("play-tts");
+    const pauseButton = document.getElementById("pause-tts");
+
+    const voiceMapping = {
+        "Divya": { voice_name: "hi_female_1", language: "Hindi", model: "mix-IN" }, "Anu": { voice_name: "hi_female_2", language: "Hindi", model: "mix-IN" },
+        "Disha": { voice_name: "hi_female_3", language: "Hindi", model: "mix-IN" }, "Arjun": { voice_name: "ravan", language: "Hindi", model: "mix-IN" },
+        "Claire": { voice_name: "en_female_1", language: "English", model: "mix-IN" }, "Mark": { voice_name: "en_male_2", language: "English", model: "mix-IN" },
+    };
+    const languageModels = { "Hindi": "mix-IN", "English": "mix-IN", "Bengali": "mix-IN", "Marathi": "mix-IN", "Kannada": "mix-IN", "Tamil": "mix-IN" };
+
+    function showState(state, data = {}) {
+        const isResult = state === 'result';
+        if (ttsInputScreen) ttsInputScreen.style.display = state === 'input' ? 'block' : 'none';
+        if (ttsResultScreen) ttsResultScreen.style.display = state !== 'input' ? 'grid' : 'none';
+        if (ttsLoaderBlock) ttsLoaderBlock.style.display = state === 'processing' ? 'block' : 'none';
+        if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = isResult ? 'grid' : 'none';
+        if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
+
+        if (isResult) {
+            if (ttsResultType) ttsResultType.textContent = data.text;
+            if (ttsResultPerson) ttsResultPerson.textContent = data.person;
+            if (ttsResultLang) ttsResultLang.textContent = data.language;
+        }
+    }
+
+    ttsInputButton.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const text = ttsTextField.value.trim();
+        if (!text) return;
+
+        const selectedVoiceName = document.querySelector('input[name="TTS-Voice"]:checked')?.id || 'Divya';
+        const selectedLanguageName = document.querySelector('input[name="TTS-Language"]:checked')?.id || 'English';
+        const voiceInfo = voiceMapping[selectedVoiceName] || voiceMapping.Divya;
+
+        showState('processing');
+
+        try {
+            const payload = { text, model: languageModels[selectedLanguageName], audio_bytes: null, sample_rate: 22050, voice_name: voiceInfo.voice_name, params: { stream_chunk_size: 120, speed: 1 }};
+            const response = await fetch("https://ttsplayground-bk.gnani.site/api/v1/api/file/process", {
+                method: "POST", headers: { "Content-Type": "application/json", "x-request-id": crypto.randomUUID() }, body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) throw new Error(`TTS API request failed: ${response.statusText}`);
+            
+            const base64Data = (await response.text()).replace(/^"|"$/g, "");
+            const binaryString = atob(base64Data);
+            const pcmBytes = new Int16Array(binaryString.length / 2);
+            for (let i = 0; i < pcmBytes.length; i++) {
+                pcmBytes[i] = (binaryString.charCodeAt(i * 2 + 1) << 8) | binaryString.charCodeAt(i * 2);
+            }
+            const wavBlob = createWavBlob(pcmBytes, 22050);
+            audio = new Audio(URL.createObjectURL(wavBlob));
+            audio.onended = () => {
+                if(ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
+                if(ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
+            };
+            showState('result', { text, person: selectedVoiceName, language: voiceInfo.language });
+        } catch (err) {
+            console.error("TTS Error:", err);
+            showState('input');
+            alert("Error generating audio. Please try again.");
+        }
+    });
+
+    if (playButton) playButton.addEventListener("click", () => {
+        if (!audio) return;
+        audio.play().catch(err => console.error("Audio playback error:", err));
+        if(ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'none';
+        if(ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'grid';
+    });
+
+    if (pauseButton) pauseButton.addEventListener("click", () => {
         if (audio && !audio.paused) {
           audio.pause();
-          if (ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
-          if (ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
+          if(ttsResultPlayBlock) ttsResultPlayBlock.style.display = 'grid';
+          if(ttsResultPauseBlock) ttsResultPauseBlock.style.display = 'none';
         }
-      });
-    }
+    });
   }
 
   // ===================================================================
-  // ASR Logic
+  // Phone Call Trigger Logic
   // ===================================================================
-  async function startRecording() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(stream);
+  function initPhoneCallTrigger() {
+    const callTriggerForm = document.getElementById('wf-form-Home-Hero-Demo');
+    if (!callTriggerForm) return;
 
-      audioChunks = [];
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunks.push(event.data);
+    const phoneInputField = document.getElementById('hero-form-field');
+    const callSubmitButton = document.getElementById('hero-form-button');
+    
+    callTriggerForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        // Prevent multiple submissions while one is in progress
+        if (callSubmitButton.classList.contains('is-loading')) return;
+
+        const phoneNumber = phoneInputField.value.trim();
+        if (!/^\d{10}$/.test(phoneNumber)) return;
+
+        const selectedCountryRadio = document.querySelector('input[name="Country-Code-Home"]:checked');
+        const selectedCountryValue = selectedCountryRadio ? selectedCountryRadio.value : 'India';
+        const countryCodePayload = (selectedCountryValue === 'United States') ? '0' : '+91';
+
+        const rateLimitStorageKey = 'apiCallRateLimit';
+        const MAX_CALLS = 10;
+        const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+        let callData = JSON.parse(localStorage.getItem(rateLimitStorageKey)) || { count: 0, timestamp: 0 };
+        
+        if (Date.now() - callData.timestamp > TEN_MINUTES_IN_MS) {
+            localStorage.removeItem(rateLimitStorageKey);
+            callData = { count: 0, timestamp: 0 };
         }
-      };
 
-      mediaRecorder.start();
-      isRecording = true;
-      showRecordingState();
-
-      let timeLeft = MAX_RECORDING_TIME / 1000;
-      if (asrTimerDisplay) asrTimerDisplay.textContent = `00:${String(timeLeft).padStart(2, '0')}`;
-      recordingTimerInterval = setInterval(() => {
-        timeLeft--;
-        if (timeLeft >= 0) {
-          if (asrTimerDisplay) asrTimerDisplay.textContent = `00:${String(timeLeft).padStart(2, '0')}`;
+        if (callData.count >= MAX_CALLS) {
+            // You might want to add a CSS class for this state as well
+            console.warn("Rate limit reached.");
+            return;
         }
-      }, 1000);
 
-      setTimeout(stopRecording, MAX_RECORDING_TIME);
-    } catch (error) {
-      console.error("Error starting recording:", error);
-      if (transcriptDisplay) transcriptDisplay.textContent = "Error: Could not access microphone.";
-      showInitialState();
-    }
-  }
-
-  function stopRecording() {
-    if (mediaRecorder && isRecording) {
-      const stream = mediaRecorder.stream;
-
-      mediaRecorder.stop();
-      isRecording = false;
-      clearInterval(recordingTimerInterval);
-
-      showProcessingState();
-
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach(track => track.stop());
-
-        const recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        await processAudio(recordedBlob);
-      };
-    }
-  }
-
-  async function processAudio(recordedBlob) {
-    try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const arrayBuffer = await recordedBlob.arrayBuffer();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-      const resampledAudioBuffer = await resampleAudio(audioBuffer, 16000);
-
-      const pcm16Data = convertToPCM16(resampledAudioBuffer);
-
-      const wavBlob = createWavBlob(pcm16Data, 16000, 1, 16);
-
-      const formData = new FormData();
-      formData.append('audio_file', wavBlob, 'audio.wav');
-      formData.append('sampling_rate', '16000');
-      formData.append('language_code', 'bn-IN, en-IN, gu-IN, hi-IN, kn-IN, ml-IN, mr-IN, or-IN, pa-IN, ta-IN, te-IN');
-      formData.append('sender_id', crypto.randomUUID());
-
-      const response = await fetch('https://api.vachana.ai/stt/v3', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error:', response.status, response.statusText, errorText);
-        showResultState(`Error during transcription: ${response.statusText}. Details: ${errorText}`, "N/A");
-        return;
-      }
-
-      const result = await response.json();
-      if (result.success) {
-        const cleanTranscript = result.transcript.replace(/<[^>]+>/g, '').trim();
-        const detectedLanguage = result.language_detected || 'Unknown';
-        showResultState(cleanTranscript || 'No transcription available', detectedLanguage);
-      } else {
-        showResultState('Transcription failed', 'N/A');
-      }
-    } catch (error) {
-      console.error('Error processing audio:', error);
-      showResultState('Error processing audio. Please try again.', 'N/A');
-    }
-  }
-
-  function convertToPCM16(audioBuffer) {
-    const channelData = audioBuffer.getChannelData(0);
-    const pcmData = new Int16Array(channelData.length);
-
-    for (let i = 0; i < channelData.length; i++) {
-      const s = Math.max(-1, Math.min(1, channelData[i]));
-      pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-
-    return pcmData;
-  }
-
-  function resampleAudio(audioBuffer, targetSampleRate) {
-    const numberOfChannels = audioBuffer.numberOfChannels;
-    const oldSampleRate = audioBuffer.sampleRate;
-    const newLength = Math.round(audioBuffer.length * targetSampleRate / oldSampleRate);
-
-    const offlineContext = new OfflineAudioContext(numberOfChannels, newLength, targetSampleRate);
-    const bufferSource = offlineContext.createBufferSource();
-    bufferSource.buffer = audioBuffer;
-    bufferSource.connect(offlineContext.destination);
-    bufferSource.start();
-
-    return offlineContext.startRendering();
-  }
-
-  function createWavBlob(pcmBytes, sampleRate = 8000, numChannels = 1, bitsPerSample = 16) {
-    const blockAlign = numChannels * bitsPerSample / 8;
-    const byteRate = sampleRate * blockAlign;
-    const dataLength = pcmBytes.length;
-    const buffer = new ArrayBuffer(44 + dataLength * 2);
-    const view = new DataView(buffer);
-    let offset = 0;
-
-    function writeString(str) {
-      for (let i = 0; i < str.length; i++) {
-        view.setUint8(offset++, str.charCodeAt(i));
-      }
-    }
-
-    writeString("RIFF");
-    view.setUint32(offset, 36 + dataLength * 2, true); offset += 4;
-    writeString("WAVE");
-    writeString("fmt ");
-    view.setUint32(offset, 16, true); offset += 4;
-    view.setUint16(offset, 1, true); offset += 2;
-    view.setUint16(offset, numChannels, true); offset += 2;
-    view.setUint32(offset, sampleRate, true); offset += 4;
-    view.setUint32(offset, byteRate, true); offset += 4;
-    view.setUint16(offset, blockAlign, true); offset += 2;
-    view.setUint16(offset, bitsPerSample, true); offset += 2;
-
-    writeString("data");
-    view.setUint32(offset, dataLength * 2, true); offset += 4;
-
-    const tempPcmUint8View = new Uint8Array(pcmBytes.buffer);
-    const wavBytes = new Uint8Array(buffer);
-    wavBytes.set(tempPcmUint8View, 44);
-
-    return new Blob([wavBytes], { type: "audio/wav" });
-  }
-
-
-   // ===================================================================
-  // Phone Call Trigger Logic with Rate Limiting
-  // ===================================================================
-  const callTriggerForm = document.getElementById('wf-form-Home-Hero-Demo');
-  const phoneInputField = document.getElementById('hero-form-field');
-  const callSubmitButton = document.getElementById('hero-form-button');
-
-  if (callTriggerForm && phoneInputField && callSubmitButton) {
-    callTriggerForm.addEventListener("submit", async function (e) {
-      e.preventDefault();
-
-      const phoneNumber = phoneInputField.value.trim();
-      if (!/^\d{10}$/.test(phoneNumber)) {
-        return;
-      }
-
-      const now = Date.now();
-      const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
-      const MAX_CALLS = 10;
-      const rateLimitStorageKey = 'apiCallRateLimit';
-      let callData = JSON.parse(localStorage.getItem(rateLimitStorageKey));
-      
-      const originalButtonTextContainer = callSubmitButton.querySelector('.hover-text:not(.cloned-text)');
-      if (!originalButtonTextContainer) {
-          return;
-      }
-
-      if (callData && (now - callData.timestamp > TEN_MINUTES_IN_MS)) {
-        callData = null;
-        localStorage.removeItem(rateLimitStorageKey);
-      }
-
-      if (!callData) {
-        callData = { count: 0, timestamp: 0 };
-      }
-
-      if (callData.count >= MAX_CALLS) {
-        originalButtonTextContainer.textContent = "Limit Reached";
         callSubmitButton.disabled = true;
-        setTimeout(() => {
-            callSubmitButton.disabled = false;
-        }, TEN_MINUTES_IN_MS);
-        return;
-      }
-      const originalButtonText = originalButtonTextContainer.textContent;
-      const waitText = callSubmitButton.getAttribute('data-wait') || "Please wait...";
-      originalButtonTextContainer.textContent = waitText;
-      callSubmitButton.disabled = true;
+        callSubmitButton.classList.add('is-loading'); // Add loading class
 
-      try {
-        const response = await fetch('https://api.inya.ai/genbots/website_trigger_call/11b6b4f44d0b4f12ad51dccb500f8aed', {
-          method: 'POST',
-          headers: {
-            'accept': 'application/json',
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            phone: phoneNumber,
-            name: "",
-            countryCode: "+91"
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`API request failed: ${response.status} ${response.statusText}. Details: ${errorText}`);
-        }
-        const result = await response.json();
-        originalButtonTextContainer.textContent = "Success!";
-
-        if (callData.count === 0) {
-            callData.timestamp = Date.now();
-        }
-        callData.count++;
-        localStorage.setItem(rateLimitStorageKey, JSON.stringify(callData));
-
-      } catch (error) {
-        originalButtonTextContainer.textContent = "Failed!";
-
-      } finally {
-        setTimeout(() => {
-            originalButtonTextContainer.textContent = originalButtonText;
-            callSubmitButton.disabled = false;
-        }, 3000);
-      }
-    });
-  }
-
-
-// ==============================
-// STS Demo Audio with Seamless Switching (multi-speaker, robust)
-// ==============================
-
-const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@75dd0396adc4ad0a47f342e7773a3ebb4a1fdbbf/';
-
-// 1) Normalize language key from DOM
-function normalizeLanguage(raw) {
-  if (!raw) return 'English';
-  let s = String(raw).trim();
-
-  // Strip Webflow numeric suffixes (e.g., "Kannada-2" -> "Kannada")
-  s = s.replace(/-+\d+$/g, '');
-
-  // Canonical aliases (lowercase keys)
-  const aliasMap = {
-    english: 'English',
-    german: 'German',
-    spanish: 'Spanish',
-    french: 'French',
-    kannada: 'Kannada',
-    malayalam: 'Malayalam',
-    marathi: 'Marathi',
-    hindi: 'Hindi',
-    bengali: 'Bengali',
-    tamil: 'Tamil',
-
-    // Localized labels from your markup
-    'ಕನ್ನಡ': 'Kannada',
-    'മലയാളം': 'Malayalam',
-    'मराठी': 'Marathi',
-    'हिंदी': 'Hindi',
-    'বাংলা': 'Bengali',
-    'தமிழ்': 'Tamil',
-    'français': 'French',
-    'deutsch': 'German',
-    'español': 'Spanish',
-  };
-
-  const lower = s.toLowerCase();
-  if (aliasMap[lower]) return aliasMap[lower];
-  if (aliasMap[s]) return aliasMap[s];
-
-  // Title-case fallback (kannada -> Kannada)
-  s = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-  return aliasMap[s] || s;
-}
-
-// 2) Map normalized language to speaker
-function speakerForLanguage(langRaw) {
-  const L = normalizeLanguage(langRaw);
-  if (L === 'German' || L === 'Spanish') return 'Blondie';
-  if (L === 'French') return 'Matt';
-  if (L === 'Kannada' || L === 'Malayalam' || L === 'Marathi') return 'Raju';
-  if (L === 'Hindi' || L === 'Bengali' || L === 'Tamil') return 'Shakuntala';
-  return 'Blondie';
-}
-
-// 3) Files per speaker (add what you have; English fallback covers gaps)
-const stsFilesBySpeaker = {
-  Blondie: {
-    English: 'English_Blondie.mp3',
-    German: 'German_Blondie.mp3',
-    Spanish: 'Spanish_Blondie.mp3',
-  },
-  Matt: {
-    English: 'English_Matt.mp3',
-    French: 'French_Matt.mp3',
-  },
-  Raju: {
-    English: 'English_Raju.mp3',
-    Kannada: 'Kannada_Raju.mp3',
-    Malayalam: 'Malayalam_Raju.mp3',
-    Marathi: 'Marathi_Raju.mp3',
-  },
-  Shakuntala: {
-    English: 'English_Shakuntala.mp3',
-    Hindi: 'Hindi_Shakuntala.mp3',
-    Bengali: 'Bengali_Shakuntala.mp3',
-    Tamil: 'Tamil_shakuntala.mp3',
-  },
-};
-
-// 4) Elements
-const stsLanguageRadios = document.querySelectorAll('input[name="STS-Language"]');
-const stsToggle = document.getElementById('sts-check');
-const stsPlayPauseBtn = document.getElementById('sts-play-pause');
-const stsPlayIcon = document.getElementById('sts-play-icon');
-const stsPauseIcon = document.getElementById('sts-pause-icon');
-const stsOtherLangLabel = document.getElementById('sts-other-lang');
-const stsSlider = document.getElementById('sts-slider'); // <-- NEW
-
-// 5) Audio element
-let stsAudioEl = new Audio();
-stsAudioEl.preload = 'auto';
-let isSwitching = false;
-
-// 6) Helpers
-function updateStsIcons(isPlaying) {
-  if (stsPlayIcon) stsPlayIcon.style.display = isPlaying ? 'none' : 'block';
-  if (stsPauseIcon) stsPauseIcon.style.display = isPlaying ? 'block' : 'none';
-}
-
-function getSelectedStsLanguage() {
-  // Prefer checked radio VALUE (clean), then ID, then title
-  const radios = Array.from(document.querySelectorAll('input[name="STS-Language"]'));
-  const checked = radios.find(r => r.checked);
-  if (checked) return normalizeLanguage(checked.value || checked.id);
-
-  const titleEl = document.getElementById('sts-language-title');
-  if (titleEl && titleEl.textContent) return normalizeLanguage(titleEl.textContent);
-
-  return 'English';
-}
-
-function resolveStsAudioUrl() {
-  const raw = getSelectedStsLanguage();
-  const lang = normalizeLanguage(raw);
-  const speaker = speakerForLanguage(lang);
-  const files = stsFilesBySpeaker[speaker] || {};
-  const isWithGnani = !!(stsToggle && stsToggle.checked);
-
-  // Toggle OFF: English_<Speaker>.mp3
-  if (!isWithGnani) {
-    const eng = files.English ||
-      (stsFilesBySpeaker[speaker] && stsFilesBySpeaker[speaker].English) ||
-      'English_Blondie.mp3';
-    return AUDIO_CDN_BASE + eng;
-  }
-
-  // Toggle ON: target language file if available, else English_<Speaker>.mp3
-  const target = files[lang];
-  if (target) return AUDIO_CDN_BASE + target;
-
-  const engFallback = files.English ||
-    (stsFilesBySpeaker[speaker] && stsFilesBySpeaker[speaker].English) ||
-    'English_Blondie.mp3';
-  return AUDIO_CDN_BASE + engFallback;
-}
-
-function updateStsToggleLabel() {
-  const selectedRadio = document.querySelector('input[name="STS-Language"]:checked');
-  if (selectedRadio && stsOtherLangLabel) {
-    const labelSpan = selectedRadio.parentElement.querySelector('.technology_form-select-link-label');
-    if (labelSpan) {
-      stsOtherLangLabel.textContent = labelSpan.textContent;
-    }
-  }
-}
-
-async function switchStsSourcePreservePosition(newUrl) {
-  if (isSwitching) return;
-  isSwitching = true;
-  try {
-    const wasPlaying = !stsAudioEl.paused && !stsAudioEl.ended;
-    const oldTime = stsAudioEl.currentTime || 0;
-
-    if (stsAudioEl.src === newUrl) {
-      isSwitching = false;
-      return;
-    }
-
-    try {
-      stsAudioEl.pause();
-    } catch (e) {}
-
-    stsAudioEl.src = newUrl;
-
-    await new Promise((resolve, reject) => {
-      const onLoaded = () => {
-        stsAudioEl.removeEventListener('loadedmetadata', onLoaded);
-        stsAudioEl.removeEventListener('error', onError);
-        resolve();
-      };
-      const onError = (e) => {
-        stsAudioEl.removeEventListener('loadedmetadata', onLoaded);
-        stsAudioEl.removeEventListener('error', onError);
-        reject(e);
-      };
-      stsAudioEl.addEventListener('loadedmetadata', onLoaded, { once: true });
-      stsAudioEl.addEventListener('error', onError, { once: true });
-      stsAudioEl.load();
-    });
-
-    const duration = isFinite(stsAudioEl.duration) ? stsAudioEl.duration : Number.MAX_SAFE_INTEGER;
-    const targetTime = Math.min(oldTime, Math.max(0, duration - 0.05));
-    if (targetTime > 0) {
-      try {
-        stsAudioEl.currentTime = targetTime;
-      } catch (e) {}
-    }
-
-    if (wasPlaying) {
-      try {
-        await stsAudioEl.play();
-        updateStsIcons(true);
-      } catch (e) {
-        updateStsIcons(false);
-      }
-    } else {
-      updateStsIcons(false);
-    }
-  } catch (err) {
-    console.warn('STS seamless switch failed:', err);
-    updateStsIcons(false);
-  } finally {
-    isSwitching = false;
-  }
-}
-
-// 7) Init
-(async function initSts() {
-  updateStsToggleLabel();
-  updateStsIcons(false);
-  const initialUrl = resolveStsAudioUrl();
-  await switchStsSourcePreservePosition(initialUrl);
-})();
-
-// 8) Events
-if (stsPlayPauseBtn) {
-  stsPlayPauseBtn.addEventListener('click', async () => {
-    const desiredUrl = resolveStsAudioUrl();
-    if (stsAudioEl.src !== desiredUrl) {
-      await switchStsSourcePreservePosition(desiredUrl);
-      if (stsAudioEl.paused) {
         try {
-          await stsAudioEl.play();
-        } catch (e) {}
-      }
-      updateStsIcons(!stsAudioEl.paused);
-      return;
-    }
-
-    if (stsAudioEl.paused) {
-      try {
-        await stsAudioEl.play();
-        updateStsIcons(true);
-      } catch (err) {
-        console.warn('STS audio play failed:', err);
-        updateStsIcons(false);
-      }
-    } else {
-      stsAudioEl.pause();
-      updateStsIcons(false);
-    }
-  });
-}
-
-(Array.from(stsLanguageRadios) || []).forEach(r => {
-  r.addEventListener('change', async () => {
-    updateStsToggleLabel();
-    const newUrl = resolveStsAudioUrl();
-    await switchStsSourcePreservePosition(newUrl);
-  });
-});
-
-if (stsToggle) {
-  stsToggle.addEventListener('change', async () => {
-    const newUrl = resolveStsAudioUrl();
-    await switchStsSourcePreservePosition(newUrl);
-  });
-}
-
-// --- SLIDER LOGIC (NEW) ---
-if (stsSlider) {
-  // Update the slider's value as the audio plays
-  stsAudioEl.addEventListener('timeupdate', () => {
-    if (isFinite(stsAudioEl.duration)) {
-      stsSlider.value = stsAudioEl.currentTime / stsAudioEl.duration;
-    }
-  });
-
-  // Allow the user to seek (jump to a new position) by dragging the slider
-  stsSlider.addEventListener('input', () => {
-    if (isFinite(stsAudioEl.duration)) {
-      stsAudioEl.currentTime = stsSlider.value * stsAudioEl.duration;
-    }
-  });
-}
-
-// Update icons and reset slider when the audio finishes
-stsAudioEl.onended = () => {
-  updateStsIcons(false);
-  if (stsSlider) stsSlider.value = 0; // <-- Modified
-};
-
-// ===================================
-// Noise Cancellation Demo
-// ===================================
-
-// 1) Audio File Mapping
-const NOISE_AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@75dd0396adc4ad0a47f342e7773a3ebb4a1fdbbf/';
-const noiseFiles = {
-  'Office': {
-    original: 'Office.mp3',
-    neutralized: 'Office_Neutralized.mp3'
-  },
-  'Call Centre': {
-    original: 'Call_Center.mp3',
-    neutralized: 'Call_Center_Neutralized.mp3'
-  },
-  'Traffic': {
-    original: 'Traffic.mp3',
-    neutralized: 'Traffic_Neutralized.mp3'
-  }
-};
-
-// 2) Element Selection
-const noiseEnvRadios = document.querySelectorAll('input[name="Noise-Environment"]');
-const noiseToggle = document.getElementById('noise-check');
-const noisePlayPauseBtn = document.getElementById('noise-play-pause');
-const noisePlayIcon = document.getElementById('noise-play-icon');
-const noisePauseIcon = document.getElementById('noise-pause-icon');
-const noiseSlider = document.getElementById('noise-slider');
-
-// 3) Audio Element
-let noiseAudioEl = new Audio();
-noiseAudioEl.preload = 'auto';
-let isSwitchingNoise = false;
-
-// 4) Helpers
-function updateNoiseIcons(isPlaying) {
-  if (noisePlayIcon) noisePlayIcon.style.display = isPlaying ? 'none' : 'block';
-  if (noisePauseIcon) noisePauseIcon.style.display = isPlaying ? 'block' : 'none';
-}
-
-function resolveNoiseAudioUrl() {
-  const selectedRadio = document.querySelector('input[name="Noise-Environment"]:checked');
-  const environment = selectedRadio ? selectedRadio.value : 'Office'; // Default to Office
-  const isNeutralized = noiseToggle ? noiseToggle.checked : false;
-
-  const fileSet = noiseFiles[environment] || noiseFiles['Office'];
-  const fileName = isNeutralized ? fileSet.neutralized : fileSet.original;
-
-  return NOISE_AUDIO_CDN_BASE + fileName;
-}
-
-async function switchNoiseSourcePreservePosition(newUrl) {
-  if (isSwitchingNoise) return;
-  isSwitchingNoise = true;
-  try {
-    const wasPlaying = !noiseAudioEl.paused && !noiseAudioEl.ended;
-    const oldTime = noiseAudioEl.currentTime || 0;
-    if (noiseAudioEl.src === newUrl) {
-      isSwitchingNoise = false;
-      return;
-    }
-    try { noiseAudioEl.pause(); } catch (e) {}
-    noiseAudioEl.src = newUrl;
-    await new Promise((resolve, reject) => {
-      const onLoaded = () => {
-        noiseAudioEl.removeEventListener('loadedmetadata', onLoaded);
-        noiseAudioEl.removeEventListener('error', onError);
-        resolve();
-      };
-      const onError = (e) => {
-        noiseAudioEl.removeEventListener('loadedmetadata', onLoaded);
-        noiseAudioEl.removeEventListener('error', onError);
-        reject(e);
-      };
-      noiseAudioEl.addEventListener('loadedmetadata', onLoaded, { once: true });
-      noiseAudioEl.addEventListener('error', onError, { once: true });
-      noiseAudioEl.load();
+            const response = await fetch('https://api.inya.ai/genbots/website_trigger_call/11b6b4f44d0b4f12ad51dccb500f8aed', {
+                method: 'POST', headers: { 'accept': 'application/json', 'content-type': 'application/json' },
+                body: JSON.stringify({ phone: phoneNumber, name: "", countryCode: countryCodePayload })
+            });
+            if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
+            
+            callSubmitButton.classList.add('is-success');
+            if (callData.count === 0) callData.timestamp = Date.now();
+            callData.count++;
+            localStorage.setItem(rateLimitStorageKey, JSON.stringify(callData));
+        } catch (error) {
+            console.error("Phone call trigger error:", error);
+            callSubmitButton.classList.add('is-failure');
+        } finally {
+            callSubmitButton.classList.remove('is-loading');
+            
+            // Reset the button's state after 3 seconds
+            setTimeout(() => {
+                callSubmitButton.classList.remove('is-success', 'is-failure');
+                callSubmitButton.disabled = false;
+            }, 3000);
+        }
     });
-    const duration = isFinite(noiseAudioEl.duration) ? noiseAudioEl.duration : Number.MAX_SAFE_INTEGER;
-    const targetTime = Math.min(oldTime, Math.max(0, duration - 0.05));
-    if (targetTime > 0) {
-      try { noiseAudioEl.currentTime = targetTime; } catch (e) {}
-    }
-    if (wasPlaying) {
-      try { await noiseAudioEl.play(); updateNoiseIcons(true); }
-      catch (e) { updateNoiseIcons(false); }
-    } else {
-      updateNoiseIcons(false);
-    }
-  } catch (err) {
-    console.warn('Noise cancellation seamless switch failed:', err);
-    updateNoiseIcons(false);
-  } finally {
-    isSwitchingNoise = false;
-  }
 }
 
-// 5) Init
-(async function initNoiseCancellation() {
-  updateNoiseIcons(false);
-  if(noiseSlider) noiseSlider.value = 0;
-  const initialUrl = resolveNoiseAudioUrl();
-  await switchNoiseSourcePreservePosition(initialUrl);
-})();
+  // ===================================================================
+  // Reusable Audio Player Logic
+  // ===================================================================
+  function initAllAudioPlayers() {
+      const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@75dd0396adc4ad0a47f342e7773a3ebb4a1fdbbf/';
+      const allAudioPlayers = [];
 
-// 6) Events
-if (noisePlayPauseBtn) {
-  noisePlayPauseBtn.addEventListener('click', async () => {
-    const desiredUrl = resolveNoiseAudioUrl();
-    if (noiseAudioEl.src !== desiredUrl) {
-      await switchNoiseSourcePreservePosition(desiredUrl);
-      if (noiseAudioEl.paused) { try { await noiseAudioEl.play(); } catch (e) {} }
-      updateNoiseIcons(!noiseAudioEl.paused);
-      return;
-    }
-    if (noiseAudioEl.paused) {
-      try { await noiseAudioEl.play(); updateNoiseIcons(true); }
-      catch (err) {
-          console.warn('Noise audio play failed:', err);
-          updateNoiseIcons(false);
+      function createSwitchablePlayer(config) {
+        const { controlRadiosQuery, toggleId, playPauseBtnId, playIconId, pauseIconId, sliderId, otherLangLabelId, fileMap, resolveUrlFn } = config;
+        const playPauseBtn = document.getElementById(playPauseBtnId);
+        if (!playPauseBtn) return;
+        
+        const controlRadios = document.querySelectorAll(controlRadiosQuery);
+        const toggle = document.getElementById(toggleId);
+        const playIcon = document.getElementById(playIconId);
+        const pauseIcon = document.getElementById(pauseIconId);
+        const slider = document.getElementById(sliderId);
+        const otherLangLabel = document.getElementById(otherLangLabelId);
+
+        const audioEl = new Audio();
+        audioEl.preload = 'auto';
+        allAudioPlayers.push(audioEl);
+        let isSwitching = false;
+        
+        const updateIcons = (isPlaying) => {
+            if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'block';
+            if (pauseIcon) pauseIcon.style.display = isPlaying ? 'block' : 'none';
+        };
+        const updateToggleLabel = () => {
+          if (!otherLangLabel) return;
+          const selectedRadio = document.querySelector(`${controlRadiosQuery}:checked`);
+          if (selectedRadio) {
+              const labelSpan = selectedRadio.parentElement.querySelector('.technology_form-select-link-label');
+              if (labelSpan) otherLangLabel.textContent = labelSpan.textContent;
+          }
+        };
+        const resolveAudioUrl = () => AUDIO_CDN_BASE + resolveUrlFn(fileMap);
+        async function switchSource(newUrl) {
+            if (isSwitching) return;
+            isSwitching = true;
+            try {
+                const wasPlaying = !audioEl.paused && !audioEl.ended;
+                const oldTime = audioEl.currentTime || 0;
+                if (audioEl.src.endsWith(newUrl)) return;
+                audioEl.pause();
+                audioEl.src = newUrl;
+                await new Promise((resolve, reject) => {
+                    audioEl.addEventListener('loadedmetadata', resolve, { once: true });
+                    audioEl.addEventListener('error', reject, { once: true });
+                });
+                const duration = isFinite(audioEl.duration) ? audioEl.duration : Infinity;
+                audioEl.currentTime = Math.min(oldTime, Math.max(0, duration - 0.05));
+                if (wasPlaying) await audioEl.play();
+            } catch (err) {
+                console.warn(`Seamless switch failed for ${playPauseBtnId}:`, err);
+            } finally {
+                updateIcons(!audioEl.paused);
+                isSwitching = false;
+            }
+        }
+        
+        playPauseBtn.addEventListener('click', async () => {
+          const desiredUrl = resolveAudioUrl();
+          if (!audioEl.src.endsWith(desiredUrl)) {
+              await switchSource(desiredUrl);
+              if (audioEl.paused) await audioEl.play().catch(e=>console.error(e));
+          } else {
+              audioEl.paused ? await audioEl.play().catch(e=>console.error(e)) : audioEl.pause();
+          }
+        });
+        
+        const onControlChange = () => { if(otherLangLabelId) updateToggleLabel(); switchSource(resolveAudioUrl()); };
+        controlRadios.forEach(r => r.addEventListener('change', onControlChange));
+        if (toggle) toggle.addEventListener('change', onControlChange);
+        
+        audioEl.addEventListener('timeupdate', () => slider && isFinite(audioEl.duration) && (slider.value = (audioEl.currentTime / audioEl.duration) * 100));
+        if (slider) slider.addEventListener('input', () => isFinite(audioEl.duration) && (audioEl.currentTime = (slider.value / 100) * audioEl.duration));
+        
+        audioEl.onplay = () => {
+            allAudioPlayers.forEach(p => p !== audioEl && !p.paused && p.pause());
+            updateIcons(true);
+        };
+        audioEl.onpause = () => updateIcons(false);
+        audioEl.onended = () => { updateIcons(false); if (slider) slider.value = 0; };
+        
+        if(otherLangLabelId) updateToggleLabel();
+        updateIcons(false);
+        switchSource(resolveAudioUrl());
       }
-    } else {
-      noiseAudioEl.pause();
-      updateNoiseIcons(false);
-    }
-  });
-}
+      
+      function createSimplePlayer(config) {
+        const { playPauseBtnId, playIconId, pauseIconId, sliderId, audioUrl } = config;
+        const playPauseBtn = document.getElementById(playPauseBtnId);
+        if (!playPauseBtn) return null;
 
-(Array.from(noiseEnvRadios) || []).forEach(r => {
-  r.addEventListener('change', async () => {
-    const newUrl = resolveNoiseAudioUrl();
-    await switchNoiseSourcePreservePosition(newUrl);
-  });
-});
+        const playIcon = document.getElementById(playIconId);
+        const pauseIcon = document.getElementById(pauseIconId);
+        const slider = document.getElementById(sliderId);
+        const audioEl = new Audio(audioUrl);
+        audioEl.preload = 'auto';
+        allAudioPlayers.push(audioEl);
+        
+        const updateIcons = (isPlaying) => {
+            if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'block';
+            if (pauseIcon) pauseIcon.style.display = isPlaying ? 'block' : 'none';
+        };
 
-if (noiseToggle) {
-  noiseToggle.addEventListener('change', async () => {
-    const newUrl = resolveNoiseAudioUrl();
-    await switchNoiseSourcePreservePosition(newUrl);
-  });
-}
-
-noiseAudioEl.addEventListener('timeupdate', () => {
-  if (noiseSlider && isFinite(noiseAudioEl.duration)) {
-    const progressPercent = (noiseAudioEl.currentTime / noiseAudioEl.duration) * 100;
-    noiseSlider.value = progressPercent;
-  }
-});
-
-if (noiseSlider) {
-  noiseSlider.addEventListener('input', () => {
-    if (isFinite(noiseAudioEl.duration)) {
-      const newTime = (noiseSlider.value / 100) * noiseAudioEl.duration;
-      noiseAudioEl.currentTime = newTime;
-    }
-  });
-}
-
-noiseAudioEl.onended = () => {
-  updateNoiseIcons(false);
-  if (noiseSlider) {
-    noiseSlider.value = 0;
-  }
-};
-
-// ===================================
-// Accent Change Demo
-// ===================================
-
-// 1) Audio File Mapping
-const ACCENT_AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@75dd0396adc4ad0a47f342e7773a3ebb4a1fdbbf/';
-const accentFiles = {
-  'Sample 1': {
-    original: 'Indian_Accent_matt.mp3',
-    transformed: 'American English_matt.mp3'
-  },
-  'Sample 2': {
-    original: 'Indian_english_chris.mp3',
-    transformed: 'Australian english_chris.mp3'
-  },
-  'Sample 3': {
-    original: 'Indian_English_james.mp3',
-    transformed: 'British English_James.mp3'
-  }
-};
-
-// 2) Element Selection
-const accentRadios = document.querySelectorAll('input[name="Accent-Transformation"]');
-const accentToggle = document.getElementById('accent-check');
-const accentPlayPauseBtn = document.getElementById('accent-play-pause');
-const accentPlayIcon = document.getElementById('accent-play-icon');
-const accentPauseIcon = document.getElementById('accent-pause-icon');
-const accentSlider = document.getElementById('accent-slider');
-
-// 3) Audio Element
-let accentAudioEl = new Audio();
-accentAudioEl.preload = 'auto';
-let isSwitchingAccent = false;
-
-// 4) Helpers
-function updateAccentIcons(isPlaying) {
-  if (accentPlayIcon) accentPlayIcon.style.display = isPlaying ? 'none' : 'block';
-  if (accentPauseIcon) accentPauseIcon.style.display = isPlaying ? 'block' : 'none';
-}
-
-function resolveAccentAudioUrl() {
-  const selectedRadio = document.querySelector('input[name="Accent-Transformation"]:checked');
-  const sample = selectedRadio ? selectedRadio.value : 'Sample 1';
-  const isTransformed = accentToggle ? accentToggle.checked : false;
-
-  const fileSet = accentFiles[sample] || accentFiles['Sample 1'];
-  const fileName = isTransformed ? fileSet.transformed : fileSet.original;
-
-  return ACCENT_AUDIO_CDN_BASE + fileName;
-}
-
-async function switchAccentSourcePreservePosition(newUrl) {
-  if (isSwitchingAccent) return;
-  isSwitchingAccent = true;
-  try {
-    const wasPlaying = !accentAudioEl.paused && !accentAudioEl.ended;
-    const oldTime = accentAudioEl.currentTime || 0;
-    if (accentAudioEl.src === newUrl) {
-      isSwitchingAccent = false;
-      return;
-    }
-    try { accentAudioEl.pause(); } catch (e) {}
-    accentAudioEl.src = newUrl;
-    await new Promise((resolve, reject) => {
-      const onLoaded = () => {
-        accentAudioEl.removeEventListener('loadedmetadata', onLoaded);
-        accentAudioEl.removeEventListener('error', onError);
-        resolve();
+        playPauseBtn.addEventListener('click', () => audioEl.paused ? audioEl.play() : audioEl.pause());
+        
+        audioEl.onplay = () => {
+            allAudioPlayers.forEach(p => p !== audioEl && !p.paused && p.pause());
+            updateIcons(true);
+        };
+        audioEl.onpause = () => updateIcons(false);
+        audioEl.onended = () => { updateIcons(false); if (slider) slider.value = 0; };
+        
+        audioEl.addEventListener('timeupdate', () => slider && isFinite(audioEl.duration) && (slider.value = (audioEl.currentTime / audioEl.duration) * 100));
+        if (slider) slider.addEventListener('input', () => isFinite(audioEl.duration) && (audioEl.currentTime = (slider.value / 100) * audioEl.duration));
+        
+        updateIcons(false);
+        if (slider) slider.value = 0;
+        return audioEl;
+      }
+      
+      // --- STS Player Config ---
+      const stsFilesBySpeaker = {
+          Blondie: { English: 'English_Blondie.mp3', German: 'German_Blondie.mp3', Spanish: 'Spanish_Blondie.mp3' },
+          Matt: { English: 'English_Matt.mp3', French: 'French_Matt.mp3' },
+          Raju: { English: 'English_Raju.mp3', Kannada: 'Kannada_Raju.mp3', Malayalam: 'Malayalam_Raju.mp3', Marathi: 'Marathi_Raju.mp3' },
+          Shakuntala: { English: 'English_Shakuntala.mp3', Hindi: 'Hindi_Shakuntala.mp3', Bengali: 'Bengali_Shakuntala.mp3', Tamil: 'Tamil_shakuntala.mp3' },
       };
-      const onError = (e) => {
-        accentAudioEl.removeEventListener('loadedmetadata', onLoaded);
-        accentAudioEl.removeEventListener('error', onError);
-        reject(e);
+      createSwitchablePlayer({
+          controlRadiosQuery: 'input[name="STS-Language"]', toggleId: 'sts-check', playPauseBtnId: 'sts-play-pause', playIconId: 'sts-play-icon',
+          pauseIconId: 'sts-pause-icon', sliderId: 'sts-slider', otherLangLabelId: 'sts-other-lang', fileMap: stsFilesBySpeaker,
+          resolveUrlFn: (fileMap) => {
+              const langRaw = document.querySelector('input[name="STS-Language"]:checked')?.value || 'French';
+              const speakerMap = { German: 'Blondie', Spanish: 'Blondie', French: 'Matt', Kannada: 'Raju', Malayalam: 'Raju', Marathi: 'Raju', Hindi: 'Shakuntala', Bengali: 'Shakuntala', Tamil: 'Shakuntala' };
+              const speaker = speakerMap[langRaw] || 'Blondie';
+              const files = fileMap[speaker] || {};
+              const isToggled = document.getElementById('sts-check')?.checked;
+              return isToggled ? (files[langRaw] || files.English) : files.English;
+          }
+      });
+
+      // --- Noise Cancellation Player Config ---
+      const noiseFiles = {
+          'Office': { original: 'Office.mp3', neutralized: 'Office_Neutralized.mp3' },
+          'Call Centre': { original: 'Call_Center.mp3', neutralized: 'Call_Center_Neutralized.mp3' },
+          'Traffic': { original: 'Traffic.mp3', neutralized: 'Traffic_Neutralized.mp3' }
       };
-      accentAudioEl.addEventListener('loadedmetadata', onLoaded, { once: true });
-      accentAudioEl.addEventListener('error', onError, { once: true });
-      accentAudioEl.load();
-    });
-    const duration = isFinite(accentAudioEl.duration) ? accentAudioEl.duration : Number.MAX_SAFE_INTEGER;
-    const targetTime = Math.min(oldTime, Math.max(0, duration - 0.05));
-    if (targetTime > 0) {
-      try { accentAudioEl.currentTime = targetTime; } catch (e) {}
-    }
-    if (wasPlaying) {
-      try { await accentAudioEl.play(); updateAccentIcons(true); }
-      catch (e) { updateAccentIcons(false); }
-    } else {
-      updateAccentIcons(false);
-    }
-  } catch (err) {
-    console.warn('Accent change seamless switch failed:', err);
-    updateAccentIcons(false);
-  } finally {
-    isSwitchingAccent = false;
-  }
-}
+      createSwitchablePlayer({
+          controlRadiosQuery: 'input[name="Noise-Environment"]', toggleId: 'noise-check', playPauseBtnId: 'noise-play-pause', playIconId: 'noise-play-icon',
+          pauseIconId: 'noise-pause-icon', sliderId: 'noise-slider', fileMap: noiseFiles,
+          resolveUrlFn: (fileMap) => {
+              const environment = document.querySelector('input[name="Noise-Environment"]:checked')?.value || 'Office';
+              const isNeutralized = document.getElementById('noise-check')?.checked;
+              const fileSet = fileMap[environment] || fileMap['Office'];
+              return isNeutralized ? fileSet.neutralized : fileSet.original;
+          }
+      });
 
-// 5) Init
-(async function initAccentChange() {
-  updateAccentIcons(false);
-  if (accentSlider) accentSlider.value = 0;
-  const initialUrl = resolveAccentAudioUrl();
-  await switchAccentSourcePreservePosition(initialUrl);
-})();
+      // --- Accent Change Player Config ---
+      const accentFiles = {
+          'Sample 1': { original: 'Indian_Accent_matt.mp3', transformed: 'American English_matt.mp3' },
+          'Sample 2': { original: 'Indian_english_chris.mp3', transformed: 'Australian english_chris.mp3' },
+          'Sample 3': { original: 'Indian_English_james.mp3', transformed: 'British English_James.mp3' }
+      };
+      createSwitchablePlayer({
+          controlRadiosQuery: 'input[name="Accent-Transformation"]', toggleId: 'accent-check', playPauseBtnId: 'accent-play-pause', playIconId: 'accent-play-icon',
+          pauseIconId: 'accent-pause-icon', sliderId: 'accent-slider', fileMap: accentFiles,
+          resolveUrlFn: (fileMap) => {
+              const sample = document.querySelector('input[name="Accent-Transformation"]:checked')?.value || 'Sample 1';
+              const isTransformed = document.getElementById('accent-check')?.checked;
+              const fileSet = fileMap[sample] || fileMap['Sample 1'];
+              return isTransformed ? fileSet.transformed : fileSet.original;
+          }
+      });
 
-// 6) Events
-if (accentPlayPauseBtn) {
-  accentPlayPauseBtn.addEventListener('click', async () => {
-    const desiredUrl = resolveAccentAudioUrl();
-    if (accentAudioEl.src !== desiredUrl) {
-      await switchAccentSourcePreservePosition(desiredUrl);
-      if (accentAudioEl.paused) { try { await accentAudioEl.play(); } catch (e) {} }
-      updateAccentIcons(!accentAudioEl.paused);
-      return;
-    }
-    if (accentAudioEl.paused) {
-      try { await accentAudioEl.play(); updateAccentIcons(true); }
-      catch (err) { console.warn('Accent audio play failed:', err); updateAccentIcons(false); }
-    } else {
-      accentAudioEl.pause();
-      updateAccentIcons(false);
-    }
-  });
-}
-
-(Array.from(accentRadios) || []).forEach(r => {
-  r.addEventListener('change', async () => {
-    const newUrl = resolveAccentAudioUrl();
-    await switchAccentSourcePreservePosition(newUrl);
-  });
-});
-
-if (accentToggle) {
-  accentToggle.addEventListener('change', async () => {
-    const newUrl = resolveAccentAudioUrl();
-    await switchAccentSourcePreservePosition(newUrl);
-  });
-}
-
-accentAudioEl.addEventListener('timeupdate', () => {
-  if (accentSlider && isFinite(accentAudioEl.duration)) {
-    const progressPercent = (accentAudioEl.currentTime / accentAudioEl.duration) * 100;
-    accentSlider.value = progressPercent;
-  }
-});
-
-if (accentSlider) {
-  accentSlider.addEventListener('input', () => {
-    if (isFinite(accentAudioEl.duration)) {
-      const newTime = (accentSlider.value / 100) * accentAudioEl.duration;
-      accentAudioEl.currentTime = newTime;
-    }
-  });
-}
-
-accentAudioEl.onended = () => {
-  updateAccentIcons(false);
-  if (accentSlider) {
-    accentSlider.value = 0;
-  }
-};
-
-// ===================================
-// Barge-in Comparison Demo
-// ===================================
-
-// This function sets up a single, simple audio player.
-function setupSimplePlayer(config) {
-  const { playPauseBtnId, playIconId, pauseIconId, sliderId, audioUrl } = config;
-  
-  const playPauseBtn = document.getElementById(playPauseBtnId);
-  const playIcon = document.getElementById(playIconId);
-  const pauseIcon = document.getElementById(pauseIconId);
-  const slider = document.getElementById(sliderId);
-
-  // If essential elements don't exist, do nothing.
-  if (!playPauseBtn || !slider) {
-    return null;
+      // --- Barge-in Players Config ---
+      createSimplePlayer({ playPauseBtnId: 'barge-play-pause', playIconId: 'barge-play-icon', pauseIconId: 'barge-pause-icon', sliderId: 'barge-slider', audioUrl: AUDIO_CDN_BASE + 'With _barge.mp3' });
+      createSimplePlayer({ playPauseBtnId: 'nobarge-play-pause', playIconId: 'nobarge-play-icon', pauseIconId: 'nobarge-pause-icon', sliderId: 'nobarge-slider', audioUrl: AUDIO_CDN_BASE + 'Without_barge.mp3' });
   }
 
-  const audioEl = new Audio(audioUrl);
-  audioEl.preload = 'auto';
+  // ===================================================================
+  // Global Utility Functions
+  // ===================================================================
+  function createWavBlob(pcmBytes, sampleRate = 16000) {
+      const numChannels = 1, bitsPerSample = 16;
+      const blockAlign = numChannels * bitsPerSample / 8;
+      const byteRate = sampleRate * blockAlign;
+      const dataLength = pcmBytes.length * pcmBytes.BYTES_PER_ELEMENT;
+      const buffer = new ArrayBuffer(44 + dataLength);
+      const view = new DataView(buffer);
+      
+      const writeString = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
 
-  // Helper function to update play/pause icons
-  const updateIcons = (isPlaying) => {
-    if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'block';
-    if (pauseIcon) pauseIcon.style.display = isPlaying ? 'block' : 'none';
-  };
+      writeString(0, "RIFF"); view.setUint32(4, 36 + dataLength, true); writeString(8, "WAVE"); writeString(12, "fmt ");
+      view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
+      view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true); view.setUint16(34, bitsPerSample, true);
+      writeString(36, "data"); view.setUint32(40, dataLength, true);
 
-  // Add event listener to the play button
-  playPauseBtn.addEventListener('click', () => {
-    if (audioEl.paused) {
-      audioEl.play();
-    } else {
-      audioEl.pause();
-    }
-  });
+      new Int16Array(buffer, 44).set(pcmBytes);
+      return new Blob([buffer], { type: "audio/wav" });
+  }
+  function convertToPCM16(audioBuffer) {
+      const data = audioBuffer.getChannelData(0);
+      const pcm = new Int16Array(data.length);
+      for (let i = 0; i < data.length; i++) {
+          pcm[i] = Math.max(-1, Math.min(1, data[i])) * 32767;
+      }
+      return pcm;
+  }
+  function resampleAudio(audioBuffer, targetSampleRate) {
+      return new Promise(resolve => {
+        const offlineContext = new OfflineAudioContext(1, audioBuffer.duration * targetSampleRate, targetSampleRate);
+        const bufferSource = offlineContext.createBufferSource();
+        bufferSource.buffer = audioBuffer;
+        bufferSource.connect(offlineContext.destination);
+        bufferSource.start();
+        offlineContext.startRendering().then(resolve);
+      });
+  }
 
-  // Update icons based on the audio's state
-  audioEl.onplay = () => updateIcons(true);
-  audioEl.onpause = () => updateIcons(false);
 
-  // Update slider as audio plays
-  audioEl.addEventListener('timeupdate', () => {
-    if (isFinite(audioEl.duration)) {
-      slider.value = (audioEl.currentTime / audioEl.duration) * 100;
-    }
-  });
-
-  // Allow seeking by dragging the slider
-  slider.addEventListener('input', () => {
-    if (isFinite(audioEl.duration)) {
-      audioEl.currentTime = (slider.value / 100) * audioEl.duration;
-    }
-  });
-
-  // Reset UI when the track ends
-  audioEl.onended = () => {
-    updateIcons(false);
-    slider.value = 0;
-  };
-
-  // Set initial UI state
-  updateIcons(false);
-  slider.value = 0;
-
-  return audioEl;
-}
-
-// --- Initialize Both Players ---
-const BARGE_AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@75dd0396adc4ad0a47f342e7773a3ebb4a1fdbbf/';
-
-const bargeAudioEl = setupSimplePlayer({
-  playPauseBtnId: 'barge-play-pause',
-  playIconId: 'barge-play-icon',
-  pauseIconId: 'barge-pause-icon',
-  sliderId: 'barge-slider',
-  audioUrl: BARGE_AUDIO_CDN_BASE + 'With _barge.mp3'
-});
-
-const noBargeAudioEl = setupSimplePlayer({
-  playPauseBtnId: 'nobarge-play-pause',
-  playIconId: 'nobarge-play-icon',
-  pauseIconId: 'nobarge-pause-icon',
-  sliderId: 'nobarge-slider',
-  audioUrl: BARGE_AUDIO_CDN_BASE + 'Without_barge.mp3'
-});
-
-// --- Add Logic to Pause One Player When the Other Plays ---
-if (bargeAudioEl && noBargeAudioEl) {
-  bargeAudioEl.addEventListener('play', () => {
-    if (!noBargeAudioEl.paused) {
-      noBargeAudioEl.pause();
-    }
-  });
-
-  noBargeAudioEl.addEventListener('play', () => {
-    if (!bargeAudioEl.paused) {
-      bargeAudioEl.pause();
-    }
-  });
-}
+  // ===================================================================
+  // Initialize All Features
+  // ===================================================================
+  initAsrLogic();
+  initTtsLogic();
+  initPhoneCallTrigger();
+  initAllAudioPlayers();
 
 });
-
