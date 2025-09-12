@@ -285,14 +285,20 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 }
 
-  // ===================================================================
+// ===================================================================
   // Reusable Audio Player Logic
   // ===================================================================
   function initAllAudioPlayers() {
-      const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@dae636ff0f7e0fbeaa808cf51eb08f19c952ee47/';
-      const allAudioPlayers = [];
+    // FIX: Prevents icons from blocking clicks on the parent button
+    const allIcons = document.querySelectorAll('.tts-media_icon');
+    allIcons.forEach(icon => {
+        icon.style.pointerEvents = 'none';
+    });
 
-      function createSwitchablePlayer(config) {
+    const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@dae636ff0f7e0fbeaa808cf51eb08f19c952ee47/';
+    const allAudioPlayers = [];
+
+    function createSwitchablePlayer(config) {
         const { controlRadiosQuery, toggleId, playPauseBtnId, playIconId, pauseIconId, sliderId, otherLangLabelId, fileMap, resolveUrlFn } = config;
         const playPauseBtn = document.getElementById(playPauseBtnId);
         if (!playPauseBtn) return;
@@ -303,7 +309,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const pauseIcon = document.getElementById(pauseIconId);
         const slider = document.getElementById(sliderId);
         const otherLangLabel = document.getElementById(otherLangLabelId);
-
+    
         const audioEl = new Audio();
         audioEl.preload = 'auto';
         allAudioPlayers.push(audioEl);
@@ -322,22 +328,31 @@ document.addEventListener("DOMContentLoaded", function () {
           }
         };
         const resolveAudioUrl = () => AUDIO_CDN_BASE + resolveUrlFn(fileMap);
+        
+        // REVISED switchSource function to preserve time
         async function switchSource(newUrl) {
-            if (isSwitching) return;
+            // Guard clause: If we are already switching or the source is already correct, do nothing.
+            if (isSwitching || audioEl.src.endsWith(newUrl)) return;
+            
             isSwitching = true;
+            const wasPlaying = !audioEl.paused && !audioEl.ended;
+            const oldTime = audioEl.currentTime || 0; // Remember the current time
+    
             try {
-                const wasPlaying = !audioEl.paused && !audioEl.ended;
-                const oldTime = audioEl.currentTime || 0;
-                if (audioEl.src.endsWith(newUrl)) return;
                 audioEl.pause();
                 audioEl.src = newUrl;
                 await new Promise((resolve, reject) => {
                     audioEl.addEventListener('loadedmetadata', resolve, { once: true });
                     audioEl.addEventListener('error', reject, { once: true });
                 });
-                const duration = isFinite(audioEl.duration) ? audioEl.duration : Infinity;
-                audioEl.currentTime = Math.min(oldTime, Math.max(0, duration - 0.05));
-                if (wasPlaying) await audioEl.play();
+                
+                // Restore the playback time to the new audio source
+                const duration = isFinite(audioEl.duration) ? audioEl.duration : 0;
+                audioEl.currentTime = Math.min(oldTime, duration);
+    
+                if (wasPlaying) {
+                    await audioEl.play();
+                }
             } catch (err) {
                 console.warn(`Seamless switch failed for ${playPauseBtnId}:`, err);
             } finally {
@@ -346,17 +361,26 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         }
         
+        // REVISED click handler to be simpler and more reliable
         playPauseBtn.addEventListener('click', async () => {
           const desiredUrl = resolveAudioUrl();
           if (!audioEl.src.endsWith(desiredUrl)) {
+              // If the wrong audio is loaded, switch it and then play.
               await switchSource(desiredUrl);
-              if (audioEl.paused) await audioEl.play().catch(e=>console.error(e));
+              if (audioEl.paused) {
+                await audioEl.play().catch(e=>console.error(e));
+              }
           } else {
+              // If the correct audio is loaded, simply toggle play/pause.
               audioEl.paused ? await audioEl.play().catch(e=>console.error(e)) : audioEl.pause();
           }
         });
         
-        const onControlChange = () => { if(otherLangLabelId) updateToggleLabel(); switchSource(resolveAudioUrl()); };
+        const onControlChange = () => {
+            if (otherLangLabelId) updateToggleLabel();
+            switchSource(resolveAudioUrl());
+        };
+        
         controlRadios.forEach(r => r.addEventListener('change', onControlChange));
         if (toggle) toggle.addEventListener('change', onControlChange);
         
@@ -372,101 +396,194 @@ document.addEventListener("DOMContentLoaded", function () {
         
         if(otherLangLabelId) updateToggleLabel();
         updateIcons(false);
-        switchSource(resolveAudioUrl());
-      }
+        // Initial load without playing
+        audioEl.src = resolveAudioUrl();
+    }
+    
+    function createSimplePlayer(config) {
+      const { playPauseBtnId, playIconId, pauseIconId, sliderId, audioUrl } = config;
+      const playPauseBtn = document.getElementById(playPauseBtnId);
+      if (!playPauseBtn) return null;
+
+      const playIcon = document.getElementById(playIconId);
+      const pauseIcon = document.getElementById(pauseIconId);
+      const slider = document.getElementById(sliderId);
+      const audioEl = new Audio(audioUrl);
+      audioEl.preload = 'auto';
+      allAudioPlayers.push(audioEl);
       
-      function createSimplePlayer(config) {
-        const { playPauseBtnId, playIconId, pauseIconId, sliderId, audioUrl } = config;
-        const playPauseBtn = document.getElementById(playPauseBtnId);
-        if (!playPauseBtn) return null;
+      const updateIcons = (isPlaying) => {
+          if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'flex';
+          if (pauseIcon) pauseIcon.style.display = isPlaying ? 'flex' : 'none';
+      };
 
-        const playIcon = document.getElementById(playIconId);
-        const pauseIcon = document.getElementById(pauseIconId);
-        const slider = document.getElementById(sliderId);
-        const audioEl = new Audio(audioUrl);
-        audioEl.preload = 'auto';
-        allAudioPlayers.push(audioEl);
-        
-        const updateIcons = (isPlaying) => {
-            if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'flex';
-            if (pauseIcon) pauseIcon.style.display = isPlaying ? 'flex' : 'none';
-        };
-
-        playPauseBtn.addEventListener('click', () => audioEl.paused ? audioEl.play() : audioEl.pause());
-        
-        audioEl.onplay = () => {
-            allAudioPlayers.forEach(p => p !== audioEl && !p.paused && p.pause());
-            updateIcons(true);
-        };
-        audioEl.onpause = () => updateIcons(false);
-        audioEl.onended = () => { updateIcons(false); if (slider) slider.value = 0; };
-        
-        audioEl.addEventListener('timeupdate', () => slider && isFinite(audioEl.duration) && (slider.value = (audioEl.currentTime / audioEl.duration) * 100));
-        if (slider) slider.addEventListener('input', () => isFinite(audioEl.duration) && (audioEl.currentTime = (slider.value / 100) * audioEl.duration));
-        
-        updateIcons(false);
-        if (slider) slider.value = 0;
-        return audioEl;
-      }
+      playPauseBtn.addEventListener('click', () => audioEl.paused ? audioEl.play() : audioEl.pause());
       
-      // --- STS Player Config ---
-      const stsFilesBySpeaker = {
-          Blondie: { English: 'English_Blondie.mp3', German: 'German_Blondie.mp3', Spanish: 'Spanish_Blondie.mp3' },
-          Matt: { English: 'English_Matt.mp3', French: 'French_Matt.mp3' },
-          Raju: { English: 'English_Raju.mp3', Kannada: 'Kannada_Raju.mp3', Malayalam: 'Malayalam_Raju.mp3', Marathi: 'Marathi_Raju.mp3' },
-          Shakuntala: { English: 'English_Shakuntala.mp3', Hindi: 'Hindi_Shakuntala.mp3', Bengali: 'Bengali_Shakuntala.mp3', Tamil: 'Tamil_shakuntala.mp3' },
+      audioEl.onplay = () => {
+          allAudioPlayers.forEach(p => p !== audioEl && !p.paused && p.pause());
+          updateIcons(true);
       };
-      createSwitchablePlayer({
-          controlRadiosQuery: 'input[name="STS-Language"]', toggleId: 'sts-check', playPauseBtnId: 'sts-play-pause', playIconId: 'sts-play-icon',
-          pauseIconId: 'sts-pause-icon', sliderId: 'sts-slider', otherLangLabelId: 'sts-other-lang', fileMap: stsFilesBySpeaker,
-          resolveUrlFn: (fileMap) => {
-              const langRaw = document.querySelector('input[name="STS-Language"]:checked')?.value || 'French';
-              const speakerMap = { German: 'Blondie', Spanish: 'Blondie', French: 'Matt', Kannada: 'Raju', Malayalam: 'Raju', Marathi: 'Raju', Hindi: 'Shakuntala', Bengali: 'Shakuntala', Tamil: 'Shakuntala' };
-              const speaker = speakerMap[langRaw] || 'Blondie';
-              const files = fileMap[speaker] || {};
-              const isToggled = document.getElementById('sts-check')?.checked;
-              return isToggled ? (files[langRaw] || files.English) : files.English;
-          }
+      audioEl.onpause = () => updateIcons(false);
+      audioEl.onended = () => { updateIcons(false); if (slider) slider.value = 0; };
+      
+      audioEl.addEventListener('timeupdate', () => slider && isFinite(audioEl.duration) && (slider.value = (audioEl.currentTime / audioEl.duration) * 100));
+      if (slider) slider.addEventListener('input', () => isFinite(audioEl.duration) && (audioEl.currentTime = (slider.value / 100) * audioEl.duration));
+      
+      updateIcons(false);
+      if (slider) slider.value = 0;
+      return audioEl;
+    }
+    
+    // --- STS Player Config ---
+    const stsFilesBySpeaker = {
+        Blondie: { English: 'English_Blondie.mp3', German: 'German_Blondie.mp3', Spanish: 'Spanish_Blondie.mp3' },
+        Matt: { English: 'English_Matt.mp3', French: 'French_Matt.mp3' },
+        Raju: { English: 'English_Raju.mp3', Kannada: 'Kannada_Raju.mp3', Malayalam: 'Malayalam_Raju.mp3', Marathi: 'Marathi_Raju.mp3' },
+        Shakuntala: { English: 'English_Shakuntala.mp3', Hindi: 'Hindi_Shakuntala.mp3', Bengali: 'Bengali_Shakuntala.mp3', Tamil: 'Tamil_shakuntala.mp3' },
+    };
+    createSwitchablePlayer({
+        controlRadiosQuery: 'input[name="STS-Language"]', toggleId: 'sts-check', playPauseBtnId: 'sts-play-pause', playIconId: 'sts-play-icon',
+        pauseIconId: 'sts-pause-icon', sliderId: 'sts-slider', otherLangLabelId: 'sts-other-lang', fileMap: stsFilesBySpeaker,
+        resolveUrlFn: (fileMap) => {
+            const langRaw = document.querySelector('input[name="STS-Language"]:checked')?.value || 'French';
+            const speakerMap = { German: 'Blondie', Spanish: 'Blondie', French: 'Matt', Kannada: 'Raju', Malayalam: 'Raju', Marathi: 'Raju', Hindi: 'Shakuntala', Bengali: 'Shakuntala', Tamil: 'Shakuntala' };
+            const speaker = speakerMap[langRaw] || 'Blondie';
+            const files = fileMap[speaker] || {};
+            const isToggled = document.getElementById('sts-check')?.checked;
+            return isToggled ? (files[langRaw] || files.English) : files.English;
+        }
+    });
+
+    // --- Noise Cancellation Player Config ---
+    const noiseFiles = {
+        'Office': { original: 'Office.mp3', neutralized: 'Office_Neutralized.mp3' },
+        'Call Centre': { original: 'Call_Center.mp3', neutralized: 'Call_Center_Neutralized.mp3' },
+        'Traffic': { original: 'Traffic.mp3', neutralized: 'Traffic_Neutralized.mp3' }
+    };
+    createSwitchablePlayer({
+        controlRadiosQuery: 'input[name="Noise-Environment"]', toggleId: 'noise-check', playPauseBtnId: 'noise-play-pause', playIconId: 'noise-play-icon',
+        pauseIconId: 'noise-pause-icon', sliderId: 'noise-slider', fileMap: noiseFiles,
+        resolveUrlFn: (fileMap) => {
+            const environment = document.querySelector('input[name="Noise-Environment"]:checked')?.value || 'Office';
+            const isNeutralized = document.getElementById('noise-check')?.checked;
+            const fileSet = fileMap[environment] || fileMap['Office'];
+            return isNeutralized ? fileSet.neutralized : fileSet.original;
+        }
+    });
+
+    // ===================================================================
+  // NEW DEDICATED ACCENT PLAYER LOGIC
+  // ===================================================================
+  function initAccentPlayerLogic() {
+    console.log("Accent Player: Initializing...");
+
+    const playPauseBtn = document.getElementById('accent-play-pause');
+    const playIcon = document.getElementById('accent-play-icon');
+    const pauseIcon = document.getElementById('accent-pause-icon');
+    const slider = document.getElementById('accent-slider');
+    const toggle = document.getElementById('accent-check');
+    const controlRadios = document.querySelectorAll('input[name="Accent-Transformation"]');
+    
+    if (!playPauseBtn) {
+      console.error("Accent Player: Could not find play/pause button. Aborting.");
+      return;
+    }
+
+    const audioEl = new Audio();
+    audioEl.preload = 'auto';
+
+    const AUDIO_CDN_BASE = 'https://cdn.jsdelivr.net/gh/adarshgowdaa/website-audio@dae636ff0f7e0fbeaa808cf51eb08f19c952ee47/';
+    const accentFiles = {
+      'American English': { original: 'Indian_Accent_matt.mp3', transformed: 'American English_matt.mp3' },
+      'Australian English': { original: 'Indian_english_chris.mp3', transformed: 'Australian english_chris.mp3' },
+      'British English': { original: 'Indian_English_james.mp3', transformed: 'British English_James.mp3' }
+    };
+
+    const updateIcons = (isPlaying) => {
+        if (playIcon) playIcon.style.display = isPlaying ? 'none' : 'flex';
+        if (pauseIcon) pauseIcon.style.display = isPlaying ? 'flex' : 'none';
+    };
+
+    const resolveUrl = () => {
+      const sample = document.querySelector('input[name="Accent-Transformation"]:checked')?.value || 'American English';
+      const isTransformed = toggle?.checked;
+      const fileSet = accentFiles[sample];
+      if (!fileSet) {
+        console.error("Accent Player: Could not find files for sample:", sample);
+        return null;
+      }
+      const fileName = isTransformed ? fileSet.transformed : fileSet.original;
+      return AUDIO_CDN_BASE + fileName;
+    };
+
+    const handleControlChange = () => {
+      console.log("Accent Player: Control changed.");
+      const wasPlaying = !audioEl.paused && !audioEl.ended;
+      const desiredUrl = resolveUrl();
+      if (desiredUrl && !audioEl.src.endsWith(desiredUrl)) {
+        console.log("Accent Player: Switching source to", desiredUrl);
+        audioEl.src = desiredUrl;
+        if (wasPlaying) {
+          audioEl.play().catch(e => console.error("Accent Player: Autoplay after switch failed.", e));
+        }
+      }
+    };
+
+    playPauseBtn.addEventListener('click', () => {
+      console.log("Accent Player: Play/pause button CLICKED.");
+      
+      // Ensure all other players are paused
+      document.querySelectorAll('audio').forEach(audio => {
+        if (audio !== audioEl) audio.pause();
       });
 
-      // --- Noise Cancellation Player Config ---
-      const noiseFiles = {
-          'Office': { original: 'Office.mp3', neutralized: 'Office_Neutralized.mp3' },
-          'Call Centre': { original: 'Call_Center.mp3', neutralized: 'Call_Center_Neutralized.mp3' },
-          'Traffic': { original: 'Traffic.mp3', neutralized: 'Traffic_Neutralized.mp3' }
-      };
-      createSwitchablePlayer({
-          controlRadiosQuery: 'input[name="Noise-Environment"]', toggleId: 'noise-check', playPauseBtnId: 'noise-play-pause', playIconId: 'noise-play-icon',
-          pauseIconId: 'noise-pause-icon', sliderId: 'noise-slider', fileMap: noiseFiles,
-          resolveUrlFn: (fileMap) => {
-              const environment = document.querySelector('input[name="Noise-Environment"]:checked')?.value || 'Office';
-              const isNeutralized = document.getElementById('noise-check')?.checked;
-              const fileSet = fileMap[environment] || fileMap['Office'];
-              return isNeutralized ? fileSet.neutralized : fileSet.original;
-          }
-      });
+      const desiredUrl = resolveUrl();
+      if (!audioEl.src.endsWith(desiredUrl)) {
+        console.log("Accent Player: Source is incorrect, setting and playing.");
+        audioEl.src = desiredUrl;
+        audioEl.play().catch(e => console.error("Accent Player: Playback failed.", e));
+      } else {
+        if (audioEl.paused) {
+          console.log("Accent Player: Audio is paused, playing.");
+          audioEl.play().catch(e => console.error("Accent Player: Playback failed.", e));
+        } else {
+          console.log("Accent Player: Audio is playing, pausing.");
+          audioEl.pause();
+        }
+      }
+    });
 
-      // --- Accent Change Player Config ---
-      const accentFiles = {
-          'Sample 1': { original: 'Indian_Accent_matt.mp3', transformed: 'American English_matt.mp3' },
-          'Sample 2': { original: 'Indian_english_chris.mp3', transformed: 'Australian english_chris.mp3' },
-          'Sample 3': { original: 'Indian_English_james.mp3', transformed: 'British English_James.mp3' }
-      };
-      createSwitchablePlayer({
-          controlRadiosQuery: 'input[name="Accent-Transformation"]', toggleId: 'accent-check', playPauseBtnId: 'accent-play-pause', playIconId: 'accent-play-icon',
-          pauseIconId: 'accent-pause-icon', sliderId: 'accent-slider', fileMap: accentFiles,
-          resolveUrlFn: (fileMap) => {
-              const sample = document.querySelector('input[name="Accent-Transformation"]:checked')?.value || 'Sample 1';
-              const isTransformed = document.getElementById('accent-check')?.checked;
-              const fileSet = fileMap[sample] || fileMap['Sample 1'];
-              return isTransformed ? fileSet.transformed : fileSet.original;
-          }
-      });
+    controlRadios.forEach(r => r.addEventListener('change', handleControlChange));
+    if (toggle) toggle.addEventListener('change', handleControlChange);
 
-      // --- Barge-in Players Config ---
-      createSimplePlayer({ playPauseBtnId: 'barge-play-pause', playIconId: 'barge-play-icon', pauseIconId: 'barge-pause-icon', sliderId: 'barge-slider', audioUrl: AUDIO_CDN_BASE + 'With _barge.mp3' });
-      createSimplePlayer({ playPauseBtnId: 'nobarge-play-pause', playIconId: 'nobarge-play-icon', pauseIconId: 'nobarge-pause-icon', sliderId: 'nobarge-slider', audioUrl: AUDIO_CDN_BASE + 'Without_barge.mp3' });
-  }
+    audioEl.onplay = () => updateIcons(true);
+    audioEl.onpause = () => updateIcons(false);
+    audioEl.onended = () => { updateIcons(false); if(slider) slider.value = 0; };
+    audioEl.addEventListener('timeupdate', () => {
+      if (slider && isFinite(audioEl.duration)) {
+        slider.value = (audioEl.currentTime / audioEl.duration) * 100;
+      }
+    });
+    if (slider) {
+      slider.addEventListener('input', () => {
+        if (isFinite(audioEl.duration)) {
+          audioEl.currentTime = (slider.value / 100) * audioEl.duration;
+        }
+      });
+    }
+
+    // Initial setup
+    updateIcons(false);
+    audioEl.src = resolveUrl();
+    console.log("Accent Player: Initialized successfully.");
+}
+
+ 
+
+    // --- Barge-in Players Config ---
+    createSimplePlayer({ playPauseBtnId: 'barge-play-pause', playIconId: 'barge-play-icon', pauseIconId: 'barge-pause-icon', sliderId: 'barge-slider', audioUrl: AUDIO_CDN_BASE + 'With _barge.mp3' });
+    createSimplePlayer({ playPauseBtnId: 'nobarge-play-pause', playIconId: 'nobarge-play-icon', pauseIconId: 'nobarge-pause-icon', sliderId: 'nobarge-slider', audioUrl: AUDIO_CDN_BASE + 'Without_barge.mp3' });
+}
 
   // ===================================================================
   // Global Utility Functions
@@ -515,6 +632,7 @@ document.addEventListener("DOMContentLoaded", function () {
   initAsrLogic();
   initTtsLogic();
   initPhoneCallTrigger();
-  initAllAudioPlayers();
+  initAllAudioPlayers(); // This will now run all players EXCEPT the accent one
+  initAccentPlayerLogic(); // We call our new dedicated function here
 
 });
