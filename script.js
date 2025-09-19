@@ -263,7 +263,7 @@ document.addEventListener("DOMContentLoaded", function () {
           callSubmitButton.classList.add('is-loading'); // Add loading class
   
           try {
-              const response = await fetch('https://api.inya.ai/genbots/website_trigger_call/11b6b4f44d0b4f12ad51dccb500f8aed', {
+              const response = await fetch('https://api.inya.ai/genbots/website_trigger_call/825003a4d58a42fcac11e68d52346547', {
                   method: 'POST', headers: { 'accept': 'application/json', 'content-type': 'application/json' },
                   body: JSON.stringify({ phone: phoneNumber, name: "", countryCode: countryCodePayload })
               });
