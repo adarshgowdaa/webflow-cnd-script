@@ -247,7 +247,7 @@ function initPhoneCallTrigger() {
 
       // 1. Define your bot IDs
       const indiaBotId = '825003a4d58a42fcac11e68d52346547';
-      const usBotId = '2b0705400efd4d499394888edc0809f7';
+      const usBotId = '05062ccaff7a4768884fce8bd218e9d3';
       
       // 2. Select the correct bot ID based on the country
       const botId = (selectedCountryValue === 'United States') ? usBotId : indiaBotId;
