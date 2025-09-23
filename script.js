@@ -241,7 +241,7 @@ function initPhoneCallTrigger() {
 
       const selectedCountryRadio = document.querySelector('input[name="Country-Code-Home"]:checked');
       const selectedCountryValue = selectedCountryRadio ? selectedCountryRadio.value : 'India';
-      const countryCodePayload = (selectedCountryValue === 'United States') ? '0' : '+91';
+      const countryCodePayload = (selectedCountryValue === 'United States') ? '+1' : '+91';
       
       // ▼▼▼ START OF CHANGES ▼▼▼
 
