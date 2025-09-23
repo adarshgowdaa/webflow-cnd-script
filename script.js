@@ -222,70 +222,84 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   
     // ===================================================================
-    // Phone Call Trigger Logic
-    // ===================================================================
-    function initPhoneCallTrigger() {
-      const callTriggerForm = document.getElementById('wf-form-Home-Hero-Demo');
-      if (!callTriggerForm) return;
+// Phone Call Trigger Logic
+// ===================================================================
+function initPhoneCallTrigger() {
+  const callTriggerForm = document.getElementById('wf-form-Home-Hero-Demo');
+  if (!callTriggerForm) return;
+
+  const phoneInputField = document.getElementById('hero-form-field');
+  const callSubmitButton = document.getElementById('hero-form-button');
   
-      const phoneInputField = document.getElementById('hero-form-field');
-      const callSubmitButton = document.getElementById('hero-form-button');
+  callTriggerForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      if (callSubmitButton.classList.contains('is-loading')) return;
+
+      const phoneNumber = phoneInputField.value.trim();
+      if (!/^\d{10}$/.test(phoneNumber)) return;
+
+      const selectedCountryRadio = document.querySelector('input[name="Country-Code-Home"]:checked');
+      const selectedCountryValue = selectedCountryRadio ? selectedCountryRadio.value : 'India';
+      const countryCodePayload = (selectedCountryValue === 'United States') ? '0' : '+91';
       
-      callTriggerForm.addEventListener("submit", async (e) => {
-          e.preventDefault();
-  
-          // Prevent multiple submissions while one is in progress
-          if (callSubmitButton.classList.contains('is-loading')) return;
-  
-          const phoneNumber = phoneInputField.value.trim();
-          if (!/^\d{10}$/.test(phoneNumber)) return;
-  
-          const selectedCountryRadio = document.querySelector('input[name="Country-Code-Home"]:checked');
-          const selectedCountryValue = selectedCountryRadio ? selectedCountryRadio.value : 'India';
-          const countryCodePayload = (selectedCountryValue === 'United States') ? '0' : '+91';
-  
-          const rateLimitStorageKey = 'apiCallRateLimit';
-          const MAX_CALLS = 10;
-          const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
-          let callData = JSON.parse(localStorage.getItem(rateLimitStorageKey)) || { count: 0, timestamp: 0 };
+      // ▼▼▼ START OF CHANGES ▼▼▼
+
+      // 1. Define your bot IDs
+      const indiaBotId = '825003a4d58a42fcac11e68d52346547';
+      const usBotId = '2b0705400efd4d499394888edc0809f7';
+      
+      // 2. Select the correct bot ID based on the country
+      const botId = (selectedCountryValue === 'United States') ? usBotId : indiaBotId;
+
+      // 3. Construct the full API URL dynamically
+      const apiUrl = `https://api.inya.ai/genbots/website_trigger_call/${botId}`;
+
+      // ▲▲▲ END OF CHANGES ▲▲▲
+
+      const rateLimitStorageKey = 'apiCallRateLimit';
+      const MAX_CALLS = 10;
+      const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+      let callData = JSON.parse(localStorage.getItem(rateLimitStorageKey)) || { count: 0, timestamp: 0 };
+      
+      if (Date.now() - callData.timestamp > TEN_MINUTES_IN_MS) {
+          localStorage.removeItem(rateLimitStorageKey);
+          callData = { count: 0, timestamp: 0 };
+      }
+
+      if (callData.count >= MAX_CALLS) {
+          console.warn("Rate limit reached.");
+          return;
+      }
+
+      callSubmitButton.disabled = true;
+      callSubmitButton.classList.add('is-loading');
+
+      try {
+          // Use the new dynamic 'apiUrl' variable here
+          const response = await fetch(apiUrl, {
+              method: 'POST', headers: { 'accept': 'application/json', 'content-type': 'application/json' },
+              body: JSON.stringify({ phone: phoneNumber, name: "", countryCode: countryCodePayload })
+          });
+          if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
           
-          if (Date.now() - callData.timestamp > TEN_MINUTES_IN_MS) {
-              localStorage.removeItem(rateLimitStorageKey);
-              callData = { count: 0, timestamp: 0 };
-          }
-  
-          if (callData.count >= MAX_CALLS) {
-              console.warn("Rate limit reached.");
-              return;
-          }
-  
-          callSubmitButton.disabled = true;
-          callSubmitButton.classList.add('is-loading'); // Add loading class
-  
-          try {
-              const response = await fetch('https://api.inya.ai/genbots/website_trigger_call/825003a4d58a42fcac11e68d52346547', {
-                  method: 'POST', headers: { 'accept': 'application/json', 'content-type': 'application/json' },
-                  body: JSON.stringify({ phone: phoneNumber, name: "", countryCode: countryCodePayload })
-              });
-              if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
-              
-              callSubmitButton.classList.add('is-success');
-              if (callData.count === 0) callData.timestamp = Date.now();
-              callData.count++;
-              localStorage.setItem(rateLimitStorageKey, JSON.stringify(callData));
-          } catch (error) {
-              console.error("Phone call trigger error:", error);
-              callSubmitButton.classList.add('is-failure');
-          } finally {
-              callSubmitButton.classList.remove('is-loading');
-              
-              setTimeout(() => {
-                  callSubmitButton.classList.remove('is-success', 'is-failure');
-                  callSubmitButton.disabled = false;
-              }, 3000);
-          }
-      });
-  }
+          callSubmitButton.classList.add('is-success');
+          if (callData.count === 0) callData.timestamp = Date.now();
+          callData.count++;
+          localStorage.setItem(rateLimitStorageKey, JSON.stringify(callData));
+      } catch (error) {
+          console.error("Phone call trigger error:", error);
+          callSubmitButton.classList.add('is-failure');
+      } finally {
+          callSubmitButton.classList.remove('is-loading');
+          
+          setTimeout(() => {
+              callSubmitButton.classList.remove('is-success', 'is-failure');
+              callSubmitButton.disabled = false;
+          }, 3000);
+      }
+  });
+}
   
   // ===================================================================
   // Reusable Audio Player Logic
