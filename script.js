@@ -3,6 +3,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const allAudioPlayers = [];
   
+  
+  
+  
+  
   // ===================================================================
   // Reusable Audio Player Logic
   // ===================================================================
@@ -292,53 +296,11 @@ function initAccentPlayerLogic() {
     audioEl.src = resolveUrl();
 } 
   
-    // ===================================================================
-    // Global Utility Functions
-    // ===================================================================
-    function createWavBlob(pcmBytes, sampleRate = 16000) {
-        const numChannels = 1, bitsPerSample = 16;
-        const blockAlign = numChannels * bitsPerSample / 8;
-        const byteRate = sampleRate * blockAlign;
-        const dataLength = pcmBytes.length * pcmBytes.BYTES_PER_ELEMENT;
-        const buffer = new ArrayBuffer(44 + dataLength);
-        const view = new DataView(buffer);
-        
-        const writeString = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
-  
-        writeString(0, "RIFF"); view.setUint32(4, 36 + dataLength, true); writeString(8, "WAVE"); writeString(12, "fmt ");
-        view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
-        view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true); view.setUint16(34, bitsPerSample, true);
-        writeString(36, "data"); view.setUint32(40, dataLength, true);
-  
-        new Int16Array(buffer, 44).set(pcmBytes);
-        return new Blob([buffer], { type: "audio/wav" });
-    }
-    function convertToPCM16(audioBuffer) {
-        const data = audioBuffer.getChannelData(0);
-        const pcm = new Int16Array(data.length);
-        for (let i = 0; i < data.length; i++) {
-            pcm[i] = Math.max(-1, Math.min(1, data[i])) * 32767;
-        }
-        return pcm;
-    }
-    function resampleAudio(audioBuffer, targetSampleRate) {
-        return new Promise(resolve => {
-          const offlineContext = new OfflineAudioContext(1, audioBuffer.duration * targetSampleRate, targetSampleRate);
-          const bufferSource = offlineContext.createBufferSource();
-          bufferSource.buffer = audioBuffer;
-          bufferSource.connect(offlineContext.destination);
-          bufferSource.start();
-          offlineContext.startRendering().then(resolve);
-        });
-    }
   
   
     // ===================================================================
     // Initialize All Features
     // ===================================================================
-    initAsrLogic();
-    initTtsLogic();
-    initPhoneCallTrigger();
     initAllAudioPlayers();
     initAccentPlayerLogic();
   
