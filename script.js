@@ -296,12 +296,94 @@ function initAccentPlayerLogic() {
     audioEl.src = resolveUrl();
 } 
   
-  
-  
+    // ===================================================================
+    // Phone Call Trigger Logic (Indian Numbers Only)
+    // ===================================================================
+    function initIndianPhoneCallTrigger() {
+        const callTriggerForm = document.getElementById('wf-form-Home-Hero-Demo');
+        if (!callTriggerForm) return;
+
+        const phoneInputField = document.getElementById('hero-form-field');
+        const callSubmitButton = document.getElementById('hero-form-button');
+        
+        callTriggerForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+
+            if (callSubmitButton.classList.contains('is-loading')) return;
+
+            const phoneNumber = phoneInputField.value.trim();
+            // Validate Indian phone number (10 digits)
+            if (!/^\d{10}$/.test(phoneNumber)) {
+                console.warn("Invalid phone number format. Please enter a 10-digit Indian phone number.");
+                return;
+            }
+
+            // Fixed Indian bot ID and country code
+            const indiaBotId = '825003a4d58a42fcac11e68d52346547';
+            const countryCode = '+91'; // Fixed to India only
+            const apiUrl = `https://api.inya.ai/genbots/website_trigger_call/${indiaBotId}`;
+
+            // Rate limiting logic
+            const rateLimitStorageKey = 'apiCallRateLimit';
+            const MAX_CALLS = 5;
+            const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+            let callData = JSON.parse(localStorage.getItem(rateLimitStorageKey)) || { count: 0, timestamp: 0 };
+            
+            if (Date.now() - callData.timestamp > TEN_MINUTES_IN_MS) {
+                localStorage.removeItem(rateLimitStorageKey);
+                callData = { count: 0, timestamp: 0 };
+            }
+
+            if (callData.count >= MAX_CALLS) {
+                console.warn("Rate limit reached. Please try again later.");
+                return;
+            }
+
+            callSubmitButton.disabled = true;
+            callSubmitButton.classList.add('is-loading');
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST', 
+                    headers: { 
+                        'accept': 'application/json', 
+                        'content-type': 'application/json' 
+                    },
+                    body: JSON.stringify({ 
+                        phone: phoneNumber, 
+                        name: "", 
+                        countryCode: countryCode 
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API request failed: ${response.statusText}`);
+                }
+                
+                callSubmitButton.classList.add('is-success');
+                if (callData.count === 0) callData.timestamp = Date.now();
+                callData.count++;
+                localStorage.setItem(rateLimitStorageKey, JSON.stringify(callData));
+                
+            } catch (error) {
+                console.error("Phone call trigger error:", error);
+                callSubmitButton.classList.add('is-failure');
+            } finally {
+                callSubmitButton.classList.remove('is-loading');
+                
+                setTimeout(() => {
+                    callSubmitButton.classList.remove('is-success', 'is-failure');
+                    callSubmitButton.disabled = false;
+                }, 3000);
+            }
+        });
+    }
+
     // ===================================================================
     // Initialize All Features
     // ===================================================================
     initAllAudioPlayers();
     initAccentPlayerLogic();
+    initIndianPhoneCallTrigger();
   
   });
