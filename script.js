@@ -312,13 +312,23 @@ function initAccentPlayerLogic() {
             if (callSubmitButton.classList.contains('is-loading')) return;
 
             const phoneNumber = phoneInputField.value.trim();
+            
+            // Check if US is selected - if so, do not proceed with API call
+            const selectedCountryRadio = document.querySelector('input[name="Country-Code-Home"]:checked');
+            const selectedCountryValue = selectedCountryRadio ? selectedCountryRadio.value : 'India';
+            
+            if (selectedCountryValue === 'United States') {
+                console.log("US selected - API call blocked as requested");
+                return; // Exit early, no API call for US
+            }
+            
             // Validate Indian phone number (10 digits)
             if (!/^\d{10}$/.test(phoneNumber)) {
                 console.warn("Invalid phone number format. Please enter a 10-digit Indian phone number.");
                 return;
             }
 
-            // Fixed Indian bot ID and country code
+            // Fixed Indian bot ID and country code (only for India)
             const indiaBotId = '825003a4d58a42fcac11e68d52346547';
             const countryCode = '+91'; // Fixed to India only
             const apiUrl = `https://api.inya.ai/genbots/website_trigger_call/${indiaBotId}`;
