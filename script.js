@@ -296,6 +296,7 @@ function initAccentPlayerLogic() {
     audioEl.src = resolveUrl();
 } 
   
+    /*
     // ===================================================================
     // Phone Call Trigger Logic (Indian Numbers Only)
     // ===================================================================
@@ -388,12 +389,13 @@ function initAccentPlayerLogic() {
             }
         });
     }
+    */
 
     // ===================================================================
     // Initialize All Features
     // ===================================================================
     initAllAudioPlayers();
     initAccentPlayerLogic();
-    initIndianPhoneCallTrigger();
+    // initIndianPhoneCallTrigger();
   
   });
